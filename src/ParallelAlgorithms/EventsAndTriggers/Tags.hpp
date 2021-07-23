@@ -88,6 +88,7 @@ template <Triggers::WhenToCheck WhenToCheck>
 struct EventsAndTriggers : db::SimpleTag {
   using type = ::EventsAndTriggers;
   using option_tags = tmpl::list<::OptionTags::EventsAndTriggers<WhenToCheck>>;
+  static constexpr bool is_overlayable = true;
 
   static constexpr bool pass_metavariables = false;
   static type create_from_options(const type& events_and_triggers) {
