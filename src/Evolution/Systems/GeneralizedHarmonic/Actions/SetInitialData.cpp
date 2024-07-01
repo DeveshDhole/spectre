@@ -54,7 +54,8 @@ void initial_gh_variables_from_adm(
 NumericInitialData::NumericInitialData(
     std::string file_glob, std::string subfile_name,
     std::variant<double, importers::ObservationSelector> observation_value,
-    std::optional<double> observation_value_epsilon, bool enable_interpolation,
+    std::optional<double> observation_value_epsilon,
+    const bool enable_interpolation,
     std::variant<AdmVars, GhVars> selected_variables)
     : importer_options_(
           std::move(file_glob), std::move(subfile_name), observation_value,

@@ -19,6 +19,7 @@
 #include "Domain/Structure/ElementId.hpp"
 #include "Domain/Tags.hpp"
 #include "Evolution/Systems/GeneralizedHarmonic/Actions/SetInitialData.hpp"
+#include "Evolution/Systems/GeneralizedHarmonic/GaugeSourceFunctions/SetPiAndPhiFromConstraints.hpp"
 #include "Evolution/Systems/GeneralizedHarmonic/System.hpp"
 #include "Framework/ActionTesting.hpp"
 #include "Framework/TestCreation.hpp"
@@ -50,6 +51,8 @@ struct MockElementArray {
   using metavariables = Metavariables;
   using chare_type = ActionTesting::MockArrayChare;
   using array_index = ElementId<3>;
+  using mutable_global_cache_tags =
+      tmpl::list<gh::Tags::SetPiAndPhiFromConstraints>;
   using phase_dependent_action_list = tmpl::list<
       Parallel::PhaseActions<
           Parallel::Phase::Initialization,
@@ -87,6 +90,8 @@ struct MockReadVolumeData {
             "CustomSpacetimeMetric");
       CHECK(get<importers::Tags::Selected<Tags::Pi<DataVector, 3>>>(
                 selected_fields) == "CustomPi");
+      CHECK(get<importers::Tags::Selected<Tags::Phi<DataVector, 3>>>(
+                selected_fields) == "CustomPhi");
       CHECK_FALSE(
           get<importers::Tags::Selected<
               gr::Tags::SpatialMetric<DataVector, 3>>>(selected_fields));
@@ -111,6 +116,8 @@ struct MockReadVolumeData {
           get<importers::Tags::Selected<
               gr::Tags::SpacetimeMetric<DataVector, 3>>>(selected_fields));
       CHECK_FALSE(get<importers::Tags::Selected<Tags::Pi<DataVector, 3>>>(
+          selected_fields));
+      CHECK_FALSE(get<importers::Tags::Selected<Tags::Phi<DataVector, 3>>>(
           selected_fields));
     } else {
       REQUIRE(false);
@@ -172,14 +179,14 @@ void test_set_initial_data(
   using element_array = MockElementArray<Metavariables>;
 
   ActionTesting::MockRuntimeSystem<Metavariables> runner{
-      initial_data.get_clone()};
+      {initial_data.get_clone()}, {true}};
 
   // Setup mock data file reader
   ActionTesting::emplace_nodegroup_component<reader_component>(
       make_not_null(&runner));
 
   // Setup element
-  const ElementId<3> element_id{0, {{{1, 0}, {1, 0}, {1, 0}}}};
+  const ElementId<3> element_id{0};
   const Mesh<3> mesh{8, Spectral::Basis::Legendre,
                      Spectral::Quadrature::GaussLobatto};
   const auto map =
@@ -208,6 +215,8 @@ void test_set_initial_data(
 
   ActionTesting::set_phase(make_not_null(&runner), Parallel::Phase::Testing);
 
+  const auto& cache = ActionTesting::cache<element_array>(runner, element_id);
+
   // SetInitialData
   ActionTesting::next_action<element_array>(make_not_null(&runner), element_id);
 
@@ -215,6 +224,10 @@ void test_set_initial_data(
     INFO("Numeric initial data");
     const auto& numeric_id =
         dynamic_cast<const NumericInitialData&>(initial_data);
+
+    CHECK(Parallel::get<gh::Tags::SetPiAndPhiFromConstraints>(cache) ==
+          std::holds_alternative<NumericInitialData::AdmVars>(
+              numeric_id.selected_variables()));
 
     REQUIRE_FALSE(ActionTesting::next_action_if_ready<element_array>(
         make_not_null(&runner), element_id));
@@ -235,6 +248,8 @@ void test_set_initial_data(
           get<gr::Tags::SpacetimeMetric<DataVector, 3>>(kerr_gh_vars);
       get<Tags::Pi<DataVector, 3>>(inbox) =
           get<Tags::Pi<DataVector, 3>>(kerr_gh_vars);
+      get<Tags::Phi<DataVector, 3>>(inbox) =
+          get<Tags::Phi<DataVector, 3>>(kerr_gh_vars);
     } else if (std::holds_alternative<NumericInitialData::AdmVars>(
                    selected_vars)) {
       const auto kerr_adm_vars = kerr.variables(
@@ -264,6 +279,8 @@ void test_set_initial_data(
     // ReceiveNumericInitialData
     ActionTesting::next_action<element_array>(make_not_null(&runner),
                                               element_id);
+  } else {
+    CHECK(Parallel::get<gh::Tags::SetPiAndPhiFromConstraints>(cache));
   }
 
   // Check result. These variables are not particularly precise because we are
@@ -286,13 +303,13 @@ SPECTRE_TEST_CASE("Unit.Evolution.Systems.Gh.NumericInitialData",
                   "[Unit][Evolution]") {
   register_factory_classes_with_charm<Metavariables>();
   test_set_initial_data(
-      NumericInitialData{
-          "TestInitialData.h5",
-          "VolumeData",
-          0.,
-          {1.0e-9},
-          false,
-          NumericInitialData::GhVars{"CustomSpacetimeMetric", "CustomPi"}},
+      NumericInitialData{"TestInitialData.h5",
+                         "VolumeData",
+                         0.,
+                         {1.0e-9},
+                         false,
+                         NumericInitialData::GhVars{"CustomSpacetimeMetric",
+                                                    "CustomPi", "CustomPhi"}},
       "NumericInitialData:\n"
       "  FileGlob: TestInitialData.h5\n"
       "  Subgroup: VolumeData\n"
@@ -301,7 +318,8 @@ SPECTRE_TEST_CASE("Unit.Evolution.Systems.Gh.NumericInitialData",
       "  ElementsAreIdentical: False\n"
       "  Variables:\n"
       "    SpacetimeMetric: CustomSpacetimeMetric\n"
-      "    Pi: CustomPi\n",
+      "    Pi: CustomPi\n"
+      "    Phi: CustomPhi\n",
       true);
   test_set_initial_data(
       NumericInitialData{

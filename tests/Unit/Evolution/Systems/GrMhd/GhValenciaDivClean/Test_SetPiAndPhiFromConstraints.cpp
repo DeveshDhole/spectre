@@ -29,6 +29,7 @@
 #include "Evolution/DgSubcell/Tags/Coordinates.hpp"
 #include "Evolution/DgSubcell/Tags/Mesh.hpp"
 #include "Evolution/Initialization/Tags.hpp"
+#include "Evolution/Systems/GeneralizedHarmonic/Actions/SetInitialData.hpp"
 #include "Evolution/Systems/GeneralizedHarmonic/GaugeSourceFunctions/DampedHarmonic.hpp"
 #include "Evolution/Systems/GeneralizedHarmonic/GaugeSourceFunctions/Dispatch.hpp"
 #include "Evolution/Systems/GeneralizedHarmonic/GaugeSourceFunctions/Gauges.hpp"
@@ -48,8 +49,9 @@
 #include "Utilities/TMPL.hpp"
 
 SPECTRE_TEST_CASE(
- "Unit.Evolution.Systems.GrMhd.GhValenciaDivClean.SetPiAndPhiFromConstraints",
- "[Unit][Evolution][Actions]") {
+    "Unit.Evolution.Systems.GrMhd.GhValenciaDivClean."
+    "SetPiAndPhiFromConstraints",
+    "[Unit][Evolution][Actions]") {
   MAKE_GENERATOR(generator);
   std::uniform_real_distribution<> metric_dist(0.1, 1.);
   std::uniform_real_distribution<> deriv_dist(-1.e-5, 1.e-5);
@@ -86,6 +88,50 @@ SPECTRE_TEST_CASE(
 
   const auto initial_dg_vars = make_vars(dg_mesh);
 
+  // Testing SetPiAndPhiFromConstraints = False. Note that we put the
+  // SetPiAndPhiFromConstraints tag in the box here because we don't have a
+  // cache.
+  {
+    auto box = db::create<
+        db::AddSimpleTags<::Tags::Time, ::Tags::Variables<evolved_vars_tags>,
+                          domain::Tags::Mesh<3>,
+                          domain::Tags::ElementMap<3, Frame::Grid>,
+                          domain::CoordinateMaps::Tags::CoordinateMap<
+                              3, Frame::Grid, Frame::Inertial>,
+                          domain::Tags::FunctionsOfTimeInitialize,
+                          domain::Tags::Coordinates<3, Frame::ElementLogical>,
+                          gh::gauges::Tags::GaugeCondition,
+                          gh::Tags::SetPiAndPhiFromConstraints,
+                          evolution::dg::subcell::Tags::ActiveGrid>,
+        db::AddComputeTags<
+            evolution::dg::subcell::Tags::MeshCompute<3>,
+            evolution::dg::subcell::Tags::LogicalCoordinatesCompute<3>>>(
+        0., initial_dg_vars, dg_mesh,
+        ElementMap<3, Frame::Grid>{
+            ElementId<3>{0},
+            domain::make_coordinate_map_base<Frame::BlockLogical, Frame::Grid>(
+                domain::CoordinateMaps::Identity<3>{})},
+        domain::make_coordinate_map_base<Frame::Grid, Frame::Inertial>(
+            domain::CoordinateMaps::Identity<3>{}),
+        std::unordered_map<
+            std::string,
+            std::unique_ptr<domain::FunctionsOfTime::FunctionOfTime>>{},
+        logical_coordinates(dg_mesh),
+        std::unique_ptr<gh::gauges::GaugeCondition>(
+            std::make_unique<gh::gauges::DampedHarmonic>(
+                100., std::array{1.2, 1.5, 1.7}, std::array{2, 4, 6})),
+        false, evolution::dg::subcell::ActiveGrid::Dg);
+
+    db::mutate_apply<grmhd::GhValenciaDivClean::SetPiAndPhiFromConstraints>(
+        make_not_null(&box));
+
+    // Should be exact since we didn't compute anything
+    CHECK(get<gh::Tags::Pi<DataVector, 3>>(initial_dg_vars) ==
+          db::get<gh::Tags::Pi<DataVector, 3>>(box));
+    CHECK(get<gh::Tags::Phi<DataVector, 3>>(initial_dg_vars) ==
+          db::get<gh::Tags::Phi<DataVector, 3>>(box));
+  }
+
   auto box = db::create<
       db::AddSimpleTags<::Tags::Time, ::Tags::Variables<evolved_vars_tags>,
                         domain::Tags::Mesh<3>,
@@ -95,6 +141,7 @@ SPECTRE_TEST_CASE(
                         domain::Tags::FunctionsOfTimeInitialize,
                         domain::Tags::Coordinates<3, Frame::ElementLogical>,
                         gh::gauges::Tags::GaugeCondition,
+                        gh::Tags::SetPiAndPhiFromConstraints,
                         evolution::dg::subcell::Tags::ActiveGrid>,
       db::AddComputeTags<
           evolution::dg::subcell::Tags::MeshCompute<3>,
@@ -113,7 +160,7 @@ SPECTRE_TEST_CASE(
       std::unique_ptr<gh::gauges::GaugeCondition>(
           std::make_unique<gh::gauges::DampedHarmonic>(
               100., std::array{1.2, 1.5, 1.7}, std::array{2, 4, 6})),
-      evolution::dg::subcell::ActiveGrid::Dg);
+      true, evolution::dg::subcell::ActiveGrid::Dg);
   const auto initial_subcell_vars =
       make_vars(db::get<evolution::dg::subcell::Tags::Mesh<3>>(box));
 
@@ -134,7 +181,7 @@ SPECTRE_TEST_CASE(
             box),
         db::get<domain::Tags::FunctionsOfTime>(box), logical_coordinates(mesh),
         get<gr::Tags::SpacetimeMetric<DataVector, 3>>(initial_vars),
-        db::get<gh::gauges::Tags::GaugeCondition>(box));
+        db::get<gh::gauges::Tags::GaugeCondition>(box), true);
 
     const auto& pi = db::get<gh::Tags::Pi<DataVector, 3>>(box);
     CHECK(pi == expected_pi);
