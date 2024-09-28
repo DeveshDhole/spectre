@@ -7,16 +7,22 @@
 #include <vector>
 
 #include "ControlSystem/Actions/PrintCurrentMeasurement.hpp"
-#include "Domain/FunctionsOfTime/OutputTimeBounds.hpp"
 #include "Domain/FunctionsOfTime/Tags.hpp"
 #include "Evolution/Deadlock/PrintDgElementArray.hpp"
+#include "Evolution/Deadlock/PrintFunctionsOfTime.hpp"
 #include "Parallel/ArrayCollection/IsDgElementCollection.hpp"
 #include "Parallel/ArrayCollection/SimpleActionOnElement.hpp"
 #include "Parallel/GlobalCache.hpp"
 #include "Parallel/Invoke.hpp"
-#include "Parallel/Printf/Printf.hpp"
 #include "Utilities/PrettyType.hpp"
 #include "Utilities/TMPL.hpp"
+
+/// \cond
+namespace observers {
+template <class Metavariables>
+struct ObserverWriter;
+}  // namespace observers
+/// \endcond
 
 namespace gh::deadlock {
 template <typename DgElementArray, typename ControlComponents,
@@ -24,13 +30,9 @@ template <typename DgElementArray, typename ControlComponents,
 void run_deadlock_analysis_simple_actions(
     Parallel::GlobalCache<Metavariables>& cache,
     const std::vector<std::string>& deadlocked_components) {
-  const auto& functions_of_time =
-      Parallel::get<::domain::Tags::FunctionsOfTime>(cache);
-
-  const std::string time_bounds =
-      ::domain::FunctionsOfTime::output_time_bounds(functions_of_time);
-
-  Parallel::printf("%s\n", time_bounds);
+  Parallel::simple_action<::deadlock::PrintFunctionsOfTime>(
+      Parallel::get_parallel_component<
+          observers::ObserverWriter<Metavariables>>(cache));
 
   if (alg::count(deadlocked_components, pretty_type::name<DgElementArray>()) ==
       1) {
