@@ -85,6 +85,7 @@ struct Interpolator {
       Parallel::PhaseActions<
           Parallel::Phase::Initialization,
           tmpl::list<Actions::InitializeInterpolator<
+                         Metavariables::volume_dim,
                          tmpl::transform<
                              all_temporal_ids,
                              tmpl::bind<Tags::VolumeVarsInfo,

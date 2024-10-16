@@ -1,6 +1,7 @@
 // Distributed under the MIT License.
 // See LICENSE.txt for details.
 
+#include "Domain/Structure/ElementId.hpp"
 #include "Framework/TestingFramework.hpp"
 
 #include <array>
@@ -65,6 +66,7 @@ class DataBox;
 namespace intrp::Tags {
 template <typename Metavariables>
 struct IndicesOfFilledInterpPoints;
+template <size_t Dim>
 struct NumberOfElements;
 template <typename TemporalId>
 struct PendingTemporalIds;
@@ -103,7 +105,8 @@ struct MockCleanUpInterpolator {
   template <typename ParallelComponent, typename DbTags, typename Metavariables,
             typename ArrayIndex,
             Requires<tmpl::list_contains_v<
-                DbTags, typename intrp::Tags::NumberOfElements>> = nullptr>
+                DbTags, typename intrp::Tags::NumberOfElements<
+                            Metavariables::volume_dim>>> = nullptr>
   static void apply(
       db::DataBox<DbTags>& box,
       const Parallel::GlobalCache<Metavariables>& /*cache*/,
@@ -114,9 +117,11 @@ struct MockCleanUpInterpolator {
     // Put something in NumberOfElements so we can check later whether
     // this function was called.  This isn't the usual usage of
     // NumberOfElements.
-    db::mutate<intrp::Tags::NumberOfElements>(
-        [](const gsl::not_null<size_t*> number_of_elements) {
-          ++(*number_of_elements);
+    db::mutate<intrp::Tags::NumberOfElements<Metavariables::volume_dim>>(
+        [](const gsl::not_null<
+            std::unordered_set<ElementId<Metavariables::volume_dim>>*>
+               number_of_elements) {
+          number_of_elements->insert(ElementId<Metavariables::volume_dim>{0});
         },
         make_not_null(&box));
   }
@@ -251,6 +256,7 @@ struct mock_interpolator {
       Parallel::PhaseActions<
           Parallel::Phase::Initialization,
           tmpl::list<intrp::Actions::InitializeInterpolator<
+              metavariables::volume_dim,
               intrp::Tags::VolumeVarsInfo<Metavariables,
                                           ::Tags::TimeAndPrevious<0>>,
               intrp::Tags::InterpolatedVarsHolders<Metavariables>>>>,
@@ -297,6 +303,7 @@ void test_interpolation_target_receive_vars() {
   CAPTURE(NumberOfExpectedCleanUpActions);
   CAPTURE(NumberOfInvalidPointsToAdd);
   using metavars = MockMetavariables<MockCallbackType, IsTimeDependent>;
+  static constexpr size_t Dim = metavars::volume_dim;
   using target_tag = typename metavars::InterpolationTargetA;
   using temporal_id_type = typename target_tag::temporal_id::type;
   using interp_component = mock_interpolator<metavars>;
@@ -474,8 +481,9 @@ void test_interpolation_target_receive_vars() {
     // Check that MockCleanUpInterpolator was NOT called.  If called, it resets
     // the (fake) number of elements, specifically so we can test it here.
     CHECK(ActionTesting::get_databox_tag<interp_component,
-                                         intrp::Tags::NumberOfElements>(
-              runner, 0) == 0);
+                                         intrp::Tags::NumberOfElements<Dim>>(
+              runner, 0)
+              .empty());
 
     // Also, there should still be the same number of TemporalIds left
     // because we did not clean them up.
@@ -542,8 +550,9 @@ void test_interpolation_target_receive_vars() {
     // Check that MockCleanUpInterpolator was called.  It resets the
     // (fake) number of elements, specifically so we can test it here.
     CHECK(ActionTesting::get_databox_tag<interp_component,
-                                         intrp::Tags::NumberOfElements>(
-              runner, 0) == 1);
+                                         intrp::Tags::NumberOfElements<Dim>>(
+              runner, 0)
+              .size() == 1);
 
     if constexpr (IsTimeDependent::value) {
       // There should be zero TemporalIds left, but one PendingTemporalId,

@@ -106,6 +106,7 @@ struct mock_interpolator {
       Parallel::PhaseActions<
           Parallel::Phase::Initialization,
           tmpl::list<intrp::Actions::InitializeInterpolator<
+              metavariables::volume_dim,
               tmpl::transform<all_ids,
                               tmpl::bind<intrp::Tags::VolumeVarsInfo,
                                          tmpl::pin<Metavariables>, tmpl::_1>>,

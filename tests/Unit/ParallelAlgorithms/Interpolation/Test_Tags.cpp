@@ -100,7 +100,7 @@ SPECTRE_TEST_CASE("Unit.Interpolation.Tags", "[Unit][NumericalAlgorithms]") {
   TestHelpers::db::test_simple_tag<
       intrp::Tags::InterpolatedVarsHolders<Metavars>>(
       "InterpolatedVarsHolders");
-  TestHelpers::db::test_simple_tag<intrp::Tags::NumberOfElements>(
+  TestHelpers::db::test_simple_tag<intrp::Tags::NumberOfElements<3>>(
       "NumberOfElements");
   TestHelpers::db::test_simple_tag<intrp::Tags::InterpPointInfo<Metavars>>(
       "InterpPointInfo");

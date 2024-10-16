@@ -24,6 +24,7 @@ class GlobalCache;
 }  // namespace Parallel
 namespace intrp {
 namespace Tags {
+template <size_t Dim>
 struct NumberOfElements;
 template <typename Metavariables>
 struct InterpolatedVarsHolders;

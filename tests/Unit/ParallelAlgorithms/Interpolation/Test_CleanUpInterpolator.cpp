@@ -45,6 +45,7 @@ struct mock_interpolator {
   using chare_type = ActionTesting::MockArrayChare;
   using array_index = size_t;
   using simple_tags = typename intrp::Actions::InitializeInterpolator<
+      metavariables::volume_dim,
       tmpl::list<intrp::Tags::VolumeVarsInfo<Metavariables, ::Tags::TimeStepId>,
                  intrp::Tags::VolumeVarsInfo<Metavariables, ::Tags::Time>>,
       intrp::Tags::InterpolatedVarsHolders<Metavariables>>::simple_tags;
@@ -138,7 +139,7 @@ SPECTRE_TEST_CASE("Unit.NumericalAlgorithms.Interpolator.CleanUp", "[Unit]") {
   ActionTesting::MockRuntimeSystem<metavars> runner{{}};
   ActionTesting::emplace_component_and_initialize<interp_component>(
       &runner, 0,
-      {0_st,
+      {std::unordered_set<ElementId<metavars::volume_dim>>{},
        typename intrp::Tags::VolumeVarsInfo<metavars, ::Tags::TimeStepId>::type{
            std::move(volume_vars_info_bc)},
        typename intrp::Tags::VolumeVarsInfo<metavars, ::Tags::Time>::type{

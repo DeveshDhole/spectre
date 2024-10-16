@@ -139,7 +139,8 @@ struct ClearVolumeVarsInfo {
   template <
       typename ParallelComponent, typename DbTags, typename Metavariables,
       typename ArrayIndex,
-      Requires<tmpl::list_contains_v<DbTags, intrp::Tags::NumberOfElements>> =
+      Requires<tmpl::list_contains_v<
+          DbTags, intrp::Tags::NumberOfElements<Metavariables::volume_dim>>> =
           nullptr>
   static void apply(db::DataBox<DbTags>& box,
                     const Parallel::GlobalCache<Metavariables>& /*cache*/,
@@ -159,7 +160,8 @@ struct AddToTemporalIdsWhenDataHasBeenInterpolated {
   template <
       typename ParallelComponent, typename DbTags, typename Metavariables,
       typename ArrayIndex,
-      Requires<tmpl::list_contains_v<DbTags, intrp::Tags::NumberOfElements>> =
+      Requires<tmpl::list_contains_v<
+          DbTags, intrp::Tags::NumberOfElements<Metavariables::volume_dim>>> =
           nullptr>
   static void apply(
       db::DataBox<DbTags>& box,
@@ -275,6 +277,7 @@ struct mock_interpolator {
   using const_global_cache_tags =
       tmpl::list<intrp::Tags::DumpVolumeDataOnFailure>;
   using simple_tags = typename intrp::Actions::InitializeInterpolator<
+      metavariables::volume_dim,
       intrp::Tags::VolumeVarsInfo<Metavariables, ::Tags::TimeStepId>,
       intrp::Tags::InterpolatedVarsHolders<Metavariables>>::simple_tags;
   using phase_dependent_action_list =
@@ -443,7 +446,7 @@ void test(const bool dump_vol_data) {
       {domain_creator.create_domain(), dump_vol_data, filename}};
   ActionTesting::emplace_group_component_and_initialize<interp_component>(
       &runner,
-      {0_st,
+      {std::unordered_set<ElementId<3>>{},
        typename intrp::Tags::VolumeVarsInfo<
            metavars,
            typename metavars::InterpolationTargetA::temporal_id>::type{},
@@ -474,8 +477,9 @@ void test(const bool dump_vol_data) {
 
   // Tell the interpolator how many elements there are by registering
   // each one.
-  for (size_t i = 0; i < element_ids.size(); ++i) {
-    runner.simple_action<interp_component, intrp::Actions::RegisterElement>(0);
+  for (const auto& element_id : element_ids) {
+    runner.simple_action<interp_component, intrp::Actions::RegisterElement>(
+        0, element_id);
   }
 
   // Register interpolator with observer writer

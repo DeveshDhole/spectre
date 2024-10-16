@@ -194,9 +194,10 @@ struct InterpolatedVarsHolders : db::SimpleTag {
       typename Metavariables::interpolation_target_tags, Metavariables>>;
 };
 
-/// Number of local `Element`s.
+/// Unordered set of element ids on each interpolator core.
+template <size_t Dim>
 struct NumberOfElements : db::SimpleTag {
-  using type = size_t;
+  using type = std::unordered_set<ElementId<Dim>>;
 };
 
 }  // namespace Tags

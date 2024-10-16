@@ -129,10 +129,12 @@ struct mock_interpolator {
   using phase_dependent_action_list = tmpl::list<Parallel::PhaseActions<
       Parallel::Phase::Initialization,
       tmpl::list<::intrp::Actions::InitializeInterpolator<
+          metavariables::volume_dim,
           intrp::Tags::VolumeVarsInfo<Metavariables, ::Tags::TimeStepId>,
           intrp::Tags::InterpolatedVarsHolders<Metavariables>>>>>;
   using initial_databox = db::compute_databox_type<
       typename ::intrp::Actions::InitializeInterpolator<
+          metavariables::volume_dim,
           intrp::Tags::VolumeVarsInfo<Metavariables, ::Tags::TimeStepId>,
           intrp::Tags::InterpolatedVarsHolders<Metavariables>>::
           return_tag_list>;

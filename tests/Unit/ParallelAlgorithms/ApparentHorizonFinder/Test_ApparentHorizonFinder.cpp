@@ -251,6 +251,7 @@ struct mock_interpolator {
   using phase_dependent_action_list = tmpl::list<Parallel::PhaseActions<
       Parallel::Phase::Initialization,
       tmpl::list<intrp::Actions::InitializeInterpolator<
+          metavariables::volume_dim,
           intrp::Tags::VolumeVarsInfo<Metavariables, ::Tags::Time>,
           intrp::Tags::InterpolatedVarsHolders<Metavariables>>>>>;
 
@@ -426,7 +427,7 @@ void test_apparent_horizon(const gsl::not_null<size_t*> test_horizon_called,
     mock_core_for_each_element.insert({element_id, core});
     ActionTesting::simple_action<interp_component,
                                  intrp::Actions::RegisterElement>(
-        make_not_null(&runner), core);
+        make_not_null(&runner), core, element_id);
     if (++core >= num_cores) {
       core = 0;
     }
