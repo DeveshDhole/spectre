@@ -14,11 +14,19 @@
 #include "Parallel/ArrayCollection/SimpleActionOnElement.hpp"
 #include "Parallel/GlobalCache.hpp"
 #include "Parallel/Invoke.hpp"
+#include "ParallelAlgorithms/Interpolation/Actions/PrintInterpolationTargetForDeadlock.hpp"
+#include "ParallelAlgorithms/Interpolation/Actions/PrintInterpolatorForDeadlock.hpp"
 #include "Utilities/FileSystem.hpp"
 #include "Utilities/PrettyType.hpp"
 #include "Utilities/TMPL.hpp"
 
 /// \cond
+namespace intrp {
+template <class Metavariables>
+struct Interpolator;
+template <class Metavariables, typename InterpolationTargetTag>
+struct InterpolationTarget;
+}  // namespace intrp
 namespace observers {
 template <class Metavariables>
 struct ObserverWriter;
@@ -27,7 +35,7 @@ struct ObserverWriter;
 
 namespace gh::deadlock {
 template <typename DgElementArray, typename ControlComponents,
-          typename Metavariables>
+          typename InterpolationTargetTags, typename Metavariables>
 void run_deadlock_analysis_simple_actions(
     Parallel::GlobalCache<Metavariables>& cache,
     const std::vector<std::string>& deadlocked_components) {
@@ -42,6 +50,23 @@ void run_deadlock_analysis_simple_actions(
       Parallel::get_parallel_component<
           observers::ObserverWriter<Metavariables>>(cache),
       deadlock_dir + "functions_of_time.out");
+
+  Parallel::simple_action<::deadlock::PrintInterpolator>(
+      Parallel::get_parallel_component<intrp::Interpolator<Metavariables>>(
+          cache),
+      deadlock_dir);
+
+  const std::string intrp_target_file =
+      deadlock_dir + "/interpolation_targets.out";
+  tmpl::for_each<InterpolationTargetTags>(
+      [&cache, &intrp_target_file](const auto tag_v) {
+        using TargetTag = tmpl::type_from<decltype(tag_v)>;
+
+        Parallel::simple_action<::deadlock::PrintInterpolationTarget>(
+            Parallel::get_parallel_component<
+                intrp::InterpolationTarget<Metavariables, TargetTag>>(cache),
+            intrp_target_file);
+      });
 
   if (alg::count(deadlocked_components, pretty_type::name<DgElementArray>()) ==
       1) {

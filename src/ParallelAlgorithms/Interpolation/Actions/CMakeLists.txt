@@ -18,6 +18,8 @@ spectre_target_headers(
   InterpolatorReceivePoints.hpp
   InterpolatorReceiveVolumeData.hpp
   InterpolatorRegisterElement.hpp
+  PrintInterpolationTargetForDeadlock.hpp
+  PrintInterpolatorForDeadlock.hpp
   SendPointsToInterpolator.hpp
   TryToInterpolate.hpp
   VerifyTemporalIdsAndSendPoints.hpp
