@@ -298,14 +298,13 @@ struct FindApparentHorizon
         ASSERT(current_id.has_value(),
                "While horizon finding, the current temporal id doesn't have a "
                "value, but it should.");
-        auto& interpolation_target = Parallel::get_parallel_component<
-            intrp::InterpolationTarget<Metavariables, InterpolationTargetTag>>(
-            *cache);
         // The iteration of these new coords is the fast flow iteration + 1
-        // because the zeroth iteration was the initial guess
-        Parallel::simple_action<
-            Actions::SendPointsToInterpolator<InterpolationTargetTag>>(
-            interpolation_target, current_id.value(), info.iteration + 1);
+        // because the zeroth iteration was the initial guess. Use 0 for the
+        // array index because it's always 0 due to the targets being singletons
+        Actions::SendPointsToInterpolator<InterpolationTargetTag>::
+            template apply<::intrp::InterpolationTarget<
+                Metavariables, InterpolationTargetTag>>(
+                *box, *cache, 0, current_id.value(), info.iteration + 1);
         // We return false because we don't want this iteration to clean
         // up the volume data, since we are using it for the next iteration
         // (i.e. the simple_action that we just called).
