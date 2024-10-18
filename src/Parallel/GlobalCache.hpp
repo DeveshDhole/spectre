@@ -344,6 +344,17 @@ class GlobalCache
   void set_resource_info(
       const Parallel::ResourceInfo<Metavariables>& resource_info);
 
+  /// Entry method to print the mutable global cache callbacks upon a deadlock
+  /// to a file.
+  ///
+  /// For each mutable cache tag, this prints
+  ///
+  /// - Tag name
+  /// - Node number
+  /// - Number of callbacks registered
+  /// - For each callback, the ArrayComponentId and the callback name
+  void print_mutable_cache_callbacks(const std::string& file_name);
+
   /// Retrieve the resource_info
   const Parallel::ResourceInfo<Metavariables>& get_resource_info() const {
     return resource_info_;
@@ -698,6 +709,46 @@ void GlobalCache<Metavariables>::set_resource_info(
   resource_info_ = resource_info;
   resource_info_has_been_set_ = true;
 }
+
+template <typename Metavariables>
+void GlobalCache<Metavariables>::print_mutable_cache_callbacks(
+    const std::string& file_name) {
+  std::stringstream ss{};
+  ss << std::setprecision(std::numeric_limits<double>::digits10 + 4)
+     << std::scientific;
+
+  ss << "========== BEGIN CALLBACKS ON NODE " << this->my_node()
+     << " ==========\n";
+
+  tmpl::for_each<typename MutableTagsStorage::tags_list>(
+      [this, &ss](auto tag_v) {
+        using Tag = tmpl::type_from<decltype(tag_v)>;
+
+        const auto& callbacks =
+            std::get<1>(tuples::get<Tag>(mutable_global_cache_));
+
+        ss << "For tag " << pretty_type::name<typename Tag::tag>()
+           << ", callbacks ("
+           << alg::accumulate(callbacks, 0_st,
+                              [](const size_t cur_size, const auto& v) {
+                                return cur_size + v.second.size();
+                              })
+           << "):\n";
+
+        for (const auto& [array_component_id, vec_callbacks] : callbacks) {
+          for (const auto& callback : vec_callbacks) {
+            ss << "  ArrayComponentId " << array_component_id << ": "
+               << callback->name() << "\n";
+          }
+        }
+      });
+
+  ss << "========== END CALLBACKS ON NODE " << this->my_node()
+     << " ============\n";
+
+  Parallel::fprintf(file_name, "%s\n", ss.str());
+}
+
 #if defined(__GNUC__) && !defined(__clang__)
 #pragma GCC diagnostic pop
 #endif  // defined(__GNUC__) && !defined(__clang__)

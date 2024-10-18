@@ -4,6 +4,7 @@
 module GlobalCache {
 
   include "optional";
+  include "string";
   include "Parallel/GlobalCacheDeclare.hpp";
   include "Parallel/ParallelComponentHelpers.hpp";
   include "Parallel/ResourceInfo.hpp";
@@ -33,6 +34,7 @@ module GlobalCache {
     entry void overlay_cache_data(
         tuples::tagged_tuple_from_typelist<
             Parallel::get_overlayable_option_list<Metavariables>>&);
+    entry void print_mutable_cache_callbacks(const std::string& file_name);
   }
   }  // namespace Parallel
 }

@@ -51,6 +51,13 @@ void run_deadlock_analysis_simple_actions(
           observers::ObserverWriter<Metavariables>>(cache),
       deadlock_dir + "functions_of_time.out");
 
+  {
+    auto cache_proxy = cache.get_this_proxy();
+
+    cache_proxy.print_mutable_cache_callbacks(deadlock_dir +
+                                              "/mutable_cache_callbacks.out");
+  }
+
   Parallel::simple_action<::deadlock::PrintInterpolator>(
       Parallel::get_parallel_component<intrp::Interpolator<Metavariables>>(
           cache),
