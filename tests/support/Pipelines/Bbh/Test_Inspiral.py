@@ -205,14 +205,8 @@ class TestInspiral(unittest.TestCase):
             {
                 "Run": modulename + ":eccentricity_control",
                 "With": {
-                    "h5_file": "./BbhReductions.h5",
-                    "subfile_name_aha": (
-                        "ApparentHorizons/ControlSystemAhA_Centers.dat"
-                    ),
-                    "subfile_name_ahb": (
-                        "ApparentHorizons/ControlSystemAhB_Centers.dat"
-                    ),
-                    "output": "ecc_control.pdf",
+                    "h5_files": "./BbhReductions.h5",
+                    "plot_output_dir": "./",
                     "id_input_file_path": str(
                         self.id_dir.resolve() / "InitialData.yaml"
                     ),

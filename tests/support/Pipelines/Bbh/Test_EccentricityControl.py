@@ -5,13 +5,18 @@ import logging
 import os
 import shutil
 import unittest
+from pathlib import Path
 
 import numpy as np
 import yaml
+from click.testing import CliRunner
 
 import spectre.IO.H5 as spectre_h5
 from spectre.Informer import unit_test_build_path, unit_test_src_path
-from spectre.Pipelines.Bbh.EccentricityControl import eccentricity_control
+from spectre.Pipelines.Bbh.EccentricityControl import (
+    eccentricity_control,
+    eccentricity_control_command,
+)
 from spectre.support.Logging import configure_logging
 from spectre.testing.PostNewtonian import BinaryTrajectories
 
@@ -20,12 +25,14 @@ class TestEccentricityControl(unittest.TestCase):
     # Set up and prepare test directory and file paths
     def setUp(self):
         self.test_dir = os.path.join(
-            unit_test_build_path(), "Pipelines", "EccentricityControl"
+            unit_test_build_path(), "Pipelines/Bbh/EccentricityControl"
         )
         self.h5_filename = os.path.join(
             self.test_dir, "TestEccentricityControlData.h5"
         )
-        self.id_input_file_path = os.path.join(self.test_dir, "Inspiral.yaml")
+        self.id_input_file_path = os.path.join(
+            self.test_dir, "InitialData.yaml"
+        )
         # Clean up any existing test directory and create new one
         shutil.rmtree(self.test_dir, ignore_errors=True)
         os.makedirs(self.test_dir, exist_ok=True)
@@ -39,6 +46,8 @@ class TestEccentricityControl(unittest.TestCase):
 
     def create_h5_file(self):
         binary_trajectories = BinaryTrajectories(initial_separation=16)
+        self.angular_velocity = binary_trajectories.angular_velocity(0)
+        self.initial_separation = binary_trajectories.separation(0)
         times = np.arange(0, 1500, 1.0)
         positions = np.array(binary_trajectories.positions(times))
         with spectre_h5.H5File(self.h5_filename, "w") as h5_file:
@@ -80,10 +89,15 @@ class TestEccentricityControl(unittest.TestCase):
         data1 = {
             "Background": {
                 "Binary": {
-                    "AngularVelocity": 0.01,
-                    "Expansion": 0.001,
-                    "XCoords": [10.0, -10.0],  # Example values for XCoords
-                }
+                    "AngularVelocity": self.angular_velocity,
+                    "Expansion": -1e-6,
+                    "XCoords": [
+                        self.initial_separation / 2.0,
+                        -self.initial_separation / 2.0,
+                    ],
+                    "ObjectLeft": {"KerrSchild": {"Mass": 0.5}},
+                    "ObjectRight": {"KerrSchild": {"Mass": 0.5}},
+                },
             }
         }
 
@@ -93,20 +107,30 @@ class TestEccentricityControl(unittest.TestCase):
 
     # Test the eccentricity control function with the created files
     def test_eccentricity_control(self):
-        output_path = os.path.join(self.test_dir, "output.pdf")
-        # Call the function with updated parameters
         eccentricity_control(
-            h5_file=self.h5_filename,
+            h5_files=self.h5_filename,
             id_input_file_path=self.id_input_file_path,
             pipeline_dir=self.test_dir,
-            tmin=0,
-            tmax=10,
-            output=output_path,
+            plot_output_dir=self.test_dir,
         )
-        # Add checks if necessary
-        self.assertTrue(
-            os.path.exists(os.path.join(self.test_dir, "output.pdf"))
+
+    def test_cli(self):
+        runner = CliRunner()
+        result = runner.invoke(
+            eccentricity_control_command,
+            [
+                self.h5_filename,
+                "-i",
+                self.id_input_file_path,
+                "-d",
+                self.test_dir,
+                "--plot-output-dir",
+                self.test_dir,
+            ],
+            catch_exceptions=False,
         )
+        self.assertEqual(result.exit_code, 0, result.output)
+        self.assertTrue((Path(self.test_dir) / "FigureEccRemoval.pdf").exists())
 
 
 if __name__ == "__main__":
