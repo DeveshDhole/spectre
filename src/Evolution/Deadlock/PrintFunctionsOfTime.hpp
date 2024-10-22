@@ -28,7 +28,8 @@ struct PrintFunctionsOfTime {
             typename ArrayIndex>
   static void apply(db::DataBox<DbTags>& /*box*/,
                     Parallel::GlobalCache<Metavariables>& cache,
-                    const ArrayIndex& /*array_index*/) {
+                    const ArrayIndex& /*array_index*/,
+                    const std::string& file_name) {
     const auto& functions_of_time =
         Parallel::get<::domain::Tags::FunctionsOfTime>(cache);
     const std::string time_bounds =
@@ -42,13 +43,14 @@ struct PrintFunctionsOfTime {
       const std::string measurement_time_bounds =
           ::domain::FunctionsOfTime::output_time_bounds(measurement_timescales);
 
-      Parallel::printf(
+      Parallel::fprintf(
+          file_name,
           "Node %zu\nFunctionsOfTime:\n%s\n\nMeasurementTimescales:\n%s\n",
           Parallel::my_node<size_t>(cache), time_bounds,
           measurement_time_bounds);
     } else {
-      Parallel::printf("Node %zu\nFunctionsOfTime:%s\n",
-                       Parallel::my_node<size_t>(cache), time_bounds);
+      Parallel::fprintf(file_name, "Node %zu\nFunctionsOfTime:%s\n",
+                        Parallel::my_node<size_t>(cache), time_bounds);
     }
   }
 };

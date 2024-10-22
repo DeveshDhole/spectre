@@ -20,13 +20,14 @@ struct PrintCurrentMeasurement {
             typename ArrayIndex>
   static void apply(db::DataBox<DbTags>& box,
                     const Parallel::GlobalCache<Metavariables>& /*cache*/,
-                    const ArrayIndex& /*array_index*/) {
+                    const ArrayIndex& /*array_index*/,
+                    const std::string& file_name) {
     const int current_measurement =
         db::get<control_system::Tags::CurrentNumberOfMeasurements>(box);
 
-    Parallel::printf("%s: Current measurement = %d\n",
-                     pretty_type::name<ParallelComponent>(),
-                     current_measurement);
+    Parallel::fprintf(file_name, "%s: Current measurement = %d\n",
+                      pretty_type::name<ParallelComponent>(),
+                      current_measurement);
   }
 };
 }  // namespace control_system::Actions

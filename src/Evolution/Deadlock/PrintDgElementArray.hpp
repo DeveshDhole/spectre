@@ -52,7 +52,8 @@ struct PrintElementInfo {
             typename ArrayIndex>
   static void apply(db::DataBox<DbTags>& box,
                     Parallel::GlobalCache<Metavariables>& cache,
-                    const ArrayIndex& array_index) {
+                    const ArrayIndex& array_index,
+                    const std::string& file_name) {
     if constexpr (Parallel::is_dg_element_collection_v<ParallelComponent>) {
       auto& element =
           Parallel::local_synchronous_action<
@@ -60,12 +61,12 @@ struct PrintElementInfo {
                   typename ParallelComponent::element_collection_tag>>(
               Parallel::get_parallel_component<ParallelComponent>(cache))
               ->at(array_index);
-      apply<ParallelComponent>(box, cache, array_index, &element);
+      apply<ParallelComponent>(box, cache, array_index, &element, file_name);
     } else {
       apply<ParallelComponent>(
           box, cache, array_index,
           Parallel::local(Parallel::get_parallel_component<ParallelComponent>(
-              cache)[array_index]));
+              cache)[array_index]), file_name);
     }
   }
 
@@ -74,7 +75,8 @@ struct PrintElementInfo {
             typename ArrayIndex, typename T>
   static void apply(db::DataBox<DbTags>& box,
                     const Parallel::GlobalCache<Metavariables>& /*cache*/,
-                    const ArrayIndex& array_index, T* local_object_ptr) {
+                    const ArrayIndex& array_index, T* local_object_ptr,
+                    const std::string& file_name) {
     auto& local_object = *local_object_ptr;
 
     const bool terminated = local_object.get_terminate();
@@ -139,7 +141,7 @@ struct PrintElementInfo {
       ss << "\n";
     }
 
-    Parallel::printf("%s", ss.str());
+    Parallel::fprintf(file_name, "%s", ss.str());
   }
 };
 }  // namespace deadlock
