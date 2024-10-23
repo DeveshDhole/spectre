@@ -122,6 +122,7 @@
 #include "ParallelAlgorithms/Events/ObserveTimeStepVolume.hpp"
 #include "ParallelAlgorithms/EventsAndDenseTriggers/DenseTrigger.hpp"
 #include "ParallelAlgorithms/EventsAndDenseTriggers/DenseTriggers/Factory.hpp"
+#include "ParallelAlgorithms/EventsAndTriggers/Actions/RunEventsOnFailure.hpp"
 #include "ParallelAlgorithms/EventsAndTriggers/Completion.hpp"
 #include "ParallelAlgorithms/EventsAndTriggers/Event.hpp"
 #include "ParallelAlgorithms/EventsAndTriggers/EventsAndTriggers.hpp"
@@ -613,7 +614,11 @@ struct EvolutionMetavars {
                   ::domain::Actions::CheckFunctionsOfTimeAreReady<volume_dim>,
                   evolution::Actions::RunEventsAndTriggers<local_time_stepping>,
                   Actions::ChangeSlabSize, step_actions, Actions::AdvanceTime,
-                  PhaseControl::Actions::ExecutePhaseChange>>>>>;
+                  PhaseControl::Actions::ExecutePhaseChange>>,
+          Parallel::PhaseActions<
+              Parallel::Phase::PostFailureCleanup,
+              tmpl::list<Actions::RunEventsOnFailure<::Tags::Time>,
+                         Parallel::Actions::TerminatePhase>>>>>;
 
   struct BondiSachs : tt::ConformsTo<intrp::protocols::InterpolationTargetTag> {
     static std::string name() { return "BondiSachsInterpolation"; }

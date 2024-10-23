@@ -91,10 +91,11 @@ struct DgElementArray {
 
   static void execute_next_phase(
       const Parallel::Phase next_phase,
-      Parallel::CProxy_GlobalCache<Metavariables>& global_cache) {
+      Parallel::CProxy_GlobalCache<Metavariables>& global_cache,
+      const bool force = false) {
     auto& local_cache = *Parallel::local_branch(global_cache);
     Parallel::get_parallel_component<DgElementArray>(local_cache)
-        .start_phase(next_phase);
+        .start_phase(next_phase, force);
   }
 };
 

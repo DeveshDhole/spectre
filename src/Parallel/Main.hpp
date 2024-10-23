@@ -37,6 +37,7 @@
 #include "Parallel/ResourceInfo.hpp"
 #include "Parallel/Tags/ResourceInfo.hpp"
 #include "Parallel/TypeTraits.hpp"
+#include "Utilities/Algorithm.hpp"
 #include "Utilities/ErrorHandling/Error.hpp"
 #include "Utilities/FileSystem.hpp"
 #include "Utilities/Formaline.hpp"
@@ -974,15 +975,52 @@ void Main<Metavariables>::check_if_component_terminated_correctly() {
   current_termination_check_index_++;
 }
 
+namespace detail {
+CREATE_IS_CALLABLE(execute_next_phase)
+CREATE_IS_CALLABLE_V(execute_next_phase)
+}  // namespace detail
+
 template <typename Metavariables>
 void Main<Metavariables>::post_deadlock_analysis_termination() {
-  Informer::print_exit_info();
-  if (not components_that_did_not_terminate_.empty()) {
-    sys::abort("");
-  } else {
+  // If no components deadlocked, then we just exit.
+  if (components_that_did_not_terminate_.empty()) {
+    Informer::print_exit_info();
     const Parallel::ExitCode exit_code =
         get<Tags::ExitCode>(phase_change_decision_data_);
     sys::exit(static_cast<int>(exit_code));
+  } else {
+    // Even though we didn't raise an exception, a deadlock is still a
+    // failure and some components may want to run things during cleanup so
+    // we switch phases here and start the PostFailureCleanup phase on each
+    // component.
+    current_phase_ = Parallel::Phase::PostFailureCleanup;
+    Parallel::printf("Entering phase: %s at time %s\n", current_phase_,
+                     sys::pretty_wall_time());
+    tmpl::for_each<component_list>([this](auto component_tag_v) {
+      using component_tag = tmpl::type_from<decltype(component_tag_v)>;
+      // If a component deadlocked, then the terminate_ flag in the
+      // DistributedObject isn't correct and we can't start a new phase.
+      // Therefore, we have to manually set it so that it thinks it terminated
+      // cleanly.
+      if (alg::found(components_that_did_not_terminate_,
+                     pretty_type::name<component_tag>())) {
+        Parallel::printf("Setting terminate to true on %s\n",
+                         pretty_type::name<component_tag>());
+      }
+      if constexpr (detail::is_execute_next_phase_callable_v<
+                        component_tag, Parallel::Phase,
+                        CProxy_GlobalCache<Metavariables>, bool>) {
+        component_tag::execute_next_phase(current_phase_, global_cache_proxy_,
+                                          true);
+      } else {
+        component_tag::execute_next_phase(current_phase_, global_cache_proxy_);
+      }
+    });
+    // As a callback, we set execute_next_phase() because it will just
+    // immediately exit after the PostFailureCleanup phase is complete which is
+    // what we want
+    CkStartQD(CkCallback(CkIndex_Main<Metavariables>::execute_next_phase(),
+                         this->thisProxy));
   }
 }
 

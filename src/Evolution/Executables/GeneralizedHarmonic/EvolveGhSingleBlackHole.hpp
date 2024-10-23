@@ -44,6 +44,7 @@
 #include "ParallelAlgorithms/ApparentHorizonFinder/ComputeHorizonVolumeQuantities.tpp"
 #include "ParallelAlgorithms/ApparentHorizonFinder/HorizonAliases.hpp"
 #include "ParallelAlgorithms/ApparentHorizonFinder/InterpolationTarget.hpp"
+#include "ParallelAlgorithms/EventsAndTriggers/Actions/RunEventsOnFailure.hpp"
 #include "ParallelAlgorithms/Interpolation/Actions/CleanUpInterpolator.hpp"
 #include "ParallelAlgorithms/Interpolation/Actions/ElementInitInterpPoints.hpp"
 #include "ParallelAlgorithms/Interpolation/Actions/InitializeInterpolationTarget.hpp"
@@ -259,7 +260,11 @@ struct EvolutionMetavars : public GeneralizedHarmonicTemplateBase<3, UseLts> {
                   ::domain::Actions::CheckFunctionsOfTimeAreReady<volume_dim>,
                   evolution::Actions::RunEventsAndTriggers<local_time_stepping>,
                   Actions::ChangeSlabSize, step_actions, Actions::AdvanceTime,
-                  PhaseControl::Actions::ExecutePhaseChange>>>>>;
+                  PhaseControl::Actions::ExecutePhaseChange>>,
+          Parallel::PhaseActions<
+              Parallel::Phase::PostFailureCleanup,
+              tmpl::list<Actions::RunEventsOnFailure<::Tags::Time>,
+                         Parallel::Actions::TerminatePhase>>>>>;
 
   struct amr : tt::ConformsTo<::amr::protocols::AmrMetavariables> {
     using element_array = gh_dg_element_array;

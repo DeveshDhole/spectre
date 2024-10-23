@@ -76,6 +76,14 @@ DomainCreator:
 
 EventsAndDenseTriggers:
 
+EventsRunAtCleanup:
+  ObservationValue: -1000.0
+  Events:
+    - ObserveTimeStepVolume:
+        SubfileName: FailureTimeStep
+        FloatingPointType: Double
+        CoordinatesFloatingPointType: Float
+
 # Set gauge and constraint damping parameters.
 # The values here are chosen empirically based on values that proved
 # successful in SpEC evolutions of binary black holes.
