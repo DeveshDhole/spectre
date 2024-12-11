@@ -13,6 +13,9 @@
 #include "PointwiseFunctions/Hydro/EquationsOfState/Barotropic3D.hpp"
 #include "Utilities/MakeWithValue.hpp"
 
+#include <cstdlib>
+#include <iostream>
+
 namespace EquationsOfState {
 template <bool IsRelativistic>
 PolytropicFluid<IsRelativistic>::PolytropicFluid(
@@ -110,6 +113,9 @@ template <class DataType>
 Scalar<DataType>
 PolytropicFluid<IsRelativistic>::specific_internal_energy_from_density_impl(
     const Scalar<DataType>& rest_mass_density) const {
+  if(*typeid(get(rest_mass_density)).name() != 'd') {
+      std::cout << "rest_mass_density: " << get(rest_mass_density) << std::endl;
+  }
   return Scalar<DataType>{
       polytropic_constant_ / (polytropic_exponent_ - 1.0) *
       pow(get(rest_mass_density), polytropic_exponent_ - 1.0)};
