@@ -75,6 +75,11 @@ void test(
     CHECK(get_output(*fixed_speed_cubic) ==
           "FixedSpeedCubic(t=10, f=1, v=0.4, tau^2=25)");
   }
+
+  CHECK(dynamic_cast<const domain::FunctionsOfTime::FixedSpeedCubic&>(
+            *f_of_t->get_clone()) ==
+        dynamic_cast<const domain::FunctionsOfTime::FixedSpeedCubic&>(
+            *f_of_t->create_at_time(0.0, 0.0)));
 }
 
 void test_function(const double initial_function_value,

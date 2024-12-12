@@ -50,6 +50,9 @@ class IntegratedFunctionOfTime : public FunctionOfTime {
 
   auto get_clone() const -> std::unique_ptr<FunctionOfTime> override;
 
+  std::unique_ptr<FunctionOfTime> create_at_time(
+      double t, double expiration_time) const override;
+
   std::array<DataVector, 1> func(double t) const override;
   std::array<DataVector, 2> func_and_deriv(double t) const override;
   [[noreturn]] std::array<DataVector, 3> func_and_2_derivs(

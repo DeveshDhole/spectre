@@ -59,6 +59,20 @@ void test(const gsl::not_null<FunctionsOfTime::FunctionOfTime*> f_of_t,
     CHECK(f_of_t->expiration_after(t) == approx(t + 0.5 * dt));
     CHECK(*f_of_t_derived != f_of_t_derived_copy);
   }
+
+  const size_t index = positions.size() - 8;
+  const auto new_time = static_cast<double>(index) * dt;
+  const auto new_expiration = new_time + dt;
+  const auto copy_at_time = f_of_t->create_at_time(new_time, new_expiration);
+
+  CAPTURE(rotation);
+  const double check_time = new_time;
+  CHECK_ITERABLE_APPROX(copy_at_time->func(check_time),
+                        f_of_t_derived->func(check_time));
+  CHECK_ITERABLE_APPROX(copy_at_time->func_and_deriv(check_time),
+                        f_of_t_derived->func_and_deriv(check_time));
+  const auto t_bounds = copy_at_time->time_bounds();
+  CHECK(t_bounds == std::array{new_time, new_expiration});
 }
 
 void test_out_of_order_update() {

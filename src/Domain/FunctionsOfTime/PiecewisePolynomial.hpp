@@ -44,6 +44,9 @@ class PiecewisePolynomial : public FunctionOfTime {
 
   auto get_clone() const -> std::unique_ptr<FunctionOfTime> override;
 
+  std::unique_ptr<FunctionOfTime> create_at_time(
+      double t, double expiration_time) const override;
+
   // clang-tidy: google-runtime-references
   // clang-tidy: cppcoreguidelines-owning-memory,-warnings-as-errors
   WRAPPED_PUPable_decl_template(PiecewisePolynomial<MaxDeriv>);  // NOLINT
@@ -70,6 +73,12 @@ class PiecewisePolynomial : public FunctionOfTime {
   /// Return the function and all derivs up to and including the `MaxDeriv` at
   /// an arbitrary time `t`.
   std::vector<DataVector> func_and_all_derivs(double t) const override;
+
+  /// Returns the function and `MaxDerivReturned` derivatives at
+  /// an arbitrary time `t`.
+  /// The function has multiple components.
+  template <size_t MaxDerivReturned = MaxDeriv>
+  std::array<DataVector, MaxDerivReturned + 1> func_and_derivs(double t) const;
 
   /// Updates the `MaxDeriv`th derivative of the function at the given time.
   /// `updated_max_deriv` is a vector of the `MaxDeriv`ths for each component.
@@ -102,12 +111,6 @@ class PiecewisePolynomial : public FunctionOfTime {
       const PiecewisePolynomial<LocalMaxDeriv>& piecewise_polynomial);
 
   void unpack_old_version(PUP::er& p, size_t version);
-
-  /// Returns the function and `MaxDerivReturned` derivatives at
-  /// an arbitrary time `t`.
-  /// The function has multiple components.
-  template <size_t MaxDerivReturned = MaxDeriv>
-  std::array<DataVector, MaxDerivReturned + 1> func_and_derivs(double t) const;
 
   void store_entry(double time_of_update,
                    std::array<DataVector, MaxDeriv + 1> func_and_derivs,

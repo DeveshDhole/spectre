@@ -189,18 +189,25 @@ SPECTRE_TEST_CASE("Unit.Domain.FunctionsOfTime.QuaternionFunctionOfTime",
         DataVector{{cos(1.0), 0.0, 0.0, sin(1.0)}},
         DataVector{{-0.5 * sin(1.0), 0.0, 0.0, 0.5 * cos(1.0)}}};
 
-    CHECK_ITERABLE_APPROX(qfot.quat_func(2.0), expected_func);
-    CHECK_ITERABLE_APPROX(qfot.quat_func_and_deriv(2.0),
-                          expected_func_and_deriv);
-    CHECK_ITERABLE_APPROX(qfot.func(2.0), expected_func);
-    CHECK_ITERABLE_APPROX(qfot.func_and_deriv(2.0), expected_func_and_deriv);
-    CHECK_ITERABLE_APPROX(qfot_ptr->func(2.0), qfot.func(2.0));
-    CHECK_ITERABLE_APPROX(qfot_ptr->func_and_deriv(2.0),
-                          qfot.func_and_deriv(2.0));
-    CHECK_ITERABLE_APPROX(qfot_serialized_deserialized.func(2.0),
-                          qfot.func(2.0));
-    CHECK_ITERABLE_APPROX(qfot_serialized_deserialized.func_and_deriv(2.0),
-                          qfot.func_and_deriv(2.0));
+    const auto do_check = [&](const auto& qfot_to_check,
+                              const auto& ptr_to_check,
+                              const auto& serialized_to_check) {
+      CHECK_ITERABLE_APPROX(qfot_to_check.quat_func(2.0), expected_func);
+      CHECK_ITERABLE_APPROX(qfot_to_check.quat_func_and_deriv(2.0),
+                            expected_func_and_deriv);
+      CHECK_ITERABLE_APPROX(qfot_to_check.func(2.0), expected_func);
+      CHECK_ITERABLE_APPROX(qfot_to_check.func_and_deriv(2.0),
+                            expected_func_and_deriv);
+      CHECK_ITERABLE_APPROX(ptr_to_check->func(2.0), qfot_to_check.func(2.0));
+      CHECK_ITERABLE_APPROX(ptr_to_check->func_and_deriv(2.0),
+                            qfot_to_check.func_and_deriv(2.0));
+      CHECK_ITERABLE_APPROX(serialized_to_check.func(2.0),
+                            qfot_to_check.func(2.0));
+      CHECK_ITERABLE_APPROX(serialized_to_check.func_and_deriv(2.0),
+                            qfot_to_check.func_and_deriv(2.0));
+    };
+
+    do_check(qfot, qfot_ptr, qfot_serialized_deserialized);
 
     CHECK_THROWS_WITH(
         qfot.quat_func_and_3_derivs(2.0),
@@ -210,6 +217,18 @@ SPECTRE_TEST_CASE("Unit.Domain.FunctionsOfTime.QuaternionFunctionOfTime",
 
     test_copy_semantics(qfot);
     test_move_semantics(std::move(qfot_serialized_deserialized), qfot);
+
+    const auto copy_at_time = qfot.create_at_time(0.7, 2.8);
+    const auto clone_copy_at_time = copy_at_time->get_clone();
+    const auto copy_serialized = serialize_and_deserialize(
+        dynamic_cast<
+            const domain::FunctionsOfTime::QuaternionFunctionOfTime<2>&>(
+            *copy_at_time));
+
+    do_check(dynamic_cast<
+                 const domain::FunctionsOfTime::QuaternionFunctionOfTime<2>&>(
+                 *copy_at_time),
+             clone_copy_at_time, copy_serialized);
   }
 
   {

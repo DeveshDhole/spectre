@@ -55,6 +55,13 @@ std::unique_ptr<FunctionOfTime> IntegratedFunctionOfTime::get_clone() const {
   return std::make_unique<IntegratedFunctionOfTime>(*this);
 }
 
+std::unique_ptr<FunctionOfTime> IntegratedFunctionOfTime::create_at_time(
+    const double t, const double expiration_time) const {
+  const auto initial_func_and_deriv = deriv_info_at_update_times_(t);
+  return std::make_unique<IntegratedFunctionOfTime>(
+      t, initial_func_and_deriv.data, expiration_time, rotation_);
+}
+
 template <size_t MaxDerivReturned>
 std::array<DataVector, MaxDerivReturned + 1>
 IntegratedFunctionOfTime::func_and_derivs(const double t) const {
