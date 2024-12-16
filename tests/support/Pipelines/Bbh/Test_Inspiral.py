@@ -159,7 +159,7 @@ class TestInspiral(unittest.TestCase):
         except SystemExit as e:
             self.assertEqual(e.code, 0)
         with open(
-            self.test_dir / "Pipeline/002_Inspiral/Segment_0000/Inspiral.yaml",
+            self.test_dir / "Pipeline/000_Inspiral/Segment_0000/Inspiral.yaml",
             "r",
         ) as open_input_file:
             metadata = next(yaml.safe_load_all(open_input_file))
@@ -173,6 +173,50 @@ class TestInspiral(unittest.TestCase):
                     "pipeline_dir": str(self.test_dir.resolve() / "Pipeline"),
                     "refinement_level": 1,
                     "polynomial_order": 5,
+                    "scheduler": "None",
+                    "copy_executable": "None",
+                    "submit_script_template": "None",
+                    "submit": True,
+                },
+            },
+        )
+        # Test with eccentricity control
+        try:
+            start_inspiral_command(
+                common_args
+                + [
+                    "-d",
+                    str(self.test_dir / "Pipeline"),
+                    "--eccentricity-control",
+                    "--no-submit",
+                ]
+            )
+        except SystemExit as e:
+            self.assertEqual(e.code, 0)
+        with open(
+            self.test_dir / "Pipeline/001_Inspiral/Segment_0000/Inspiral.yaml",
+            "r",
+        ) as open_input_file:
+            metadata = next(yaml.safe_load_all(open_input_file))
+        self.maxDiff = None
+        modulename = "spectre.Pipelines.Bbh.EccentricityControl"
+        self.assertEqual(
+            metadata["Next"],
+            {
+                "Run": modulename + ":eccentricity_control",
+                "With": {
+                    "h5_file": "./BbhReductions.h5",
+                    "subfile_name_aha": (
+                        "ApparentHorizons/ControlSystemAhA_Centers.dat"
+                    ),
+                    "subfile_name_ahb": (
+                        "ApparentHorizons/ControlSystemAhB_Centers.dat"
+                    ),
+                    "output": "ecc_control.pdf",
+                    "id_input_file_path": str(
+                        self.id_dir.resolve() / "InitialData.yaml"
+                    ),
+                    "pipeline_dir": str(self.test_dir.resolve() / "Pipeline"),
                     "scheduler": "None",
                     "copy_executable": "None",
                     "submit_script_template": "None",

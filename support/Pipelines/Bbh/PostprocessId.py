@@ -37,6 +37,7 @@ def postprocess_id(
     control_polynomial_order: int = 6,
     control_params: Dict[SupportedParams, Union[float, Sequence[float]]] = {},
     evolve: bool = False,
+    eccentricity_control: bool = False,
     pipeline_dir: Optional[Union[str, Path]] = None,
     **scheduler_kwargs,
 ):
@@ -153,7 +154,8 @@ def postprocess_id(
         start_inspiral(
             id_input_file_path,
             id_run_dir=id_run_dir,
-            continue_with_ringdown=True,
+            continue_with_ringdown=not eccentricity_control,
+            eccentricity_control=eccentricity_control,
             pipeline_dir=pipeline_dir,
             **scheduler_kwargs,
         )

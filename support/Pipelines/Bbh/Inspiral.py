@@ -10,6 +10,7 @@ import yaml
 from rich.pretty import pretty_repr
 
 import spectre.IO.H5 as spectre_h5
+from spectre.support.DirectoryStructure import PipelineStep, list_pipeline_steps
 from spectre.support.Schedule import schedule, scheduler_options
 from spectre.Visualization.ReadH5 import to_dataframe
 
@@ -372,7 +373,13 @@ def start_inspiral(
             " 'pipeline_dir' automatically."
         )
     if pipeline_dir and not run_dir and not segments_dir:
-        segments_dir = pipeline_dir / "002_Inspiral"
+        pipeline_steps = list_pipeline_steps(pipeline_dir)
+        if pipeline_steps:  # Check if the list is not empty
+            segments_dir = pipeline_steps[-1].next(label="Inspiral").path
+        else:
+            segments_dir = PipelineStep.first(
+                directory=pipeline_dir, label="Inspiral"
+            ).path
 
     # Determine resource allocation
     if (

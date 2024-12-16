@@ -9,8 +9,10 @@ from pathlib import Path
 from spectre.Informer import unit_test_build_path
 from spectre.support.DirectoryStructure import (
     Checkpoint,
+    PipelineStep,
     Segment,
     list_checkpoints,
+    list_pipeline_steps,
     list_segments,
 )
 from spectre.support.Logging import configure_logging
@@ -62,6 +64,32 @@ class TestDirectoryStructure(unittest.TestCase):
         next_segment.path.mkdir()
         self.assertEqual(
             list_segments(self.test_dir), [first_segment, segment, next_segment]
+        )
+
+    def test_pipeline_steps(self):
+        first_step = PipelineStep.first(self.test_dir, "InitialData")
+        self.assertEqual(
+            first_step,
+            PipelineStep(
+                path=self.test_dir / "000_InitialData",
+                id=0,
+                label="InitialData",
+            ),
+        )
+        self.assertEqual(PipelineStep.match(first_step.path), first_step)
+
+        next_step = first_step.next("Processing")
+        self.assertEqual(next_step.id, 1)
+        self.assertEqual(next_step.path.name, "001_Processing")
+        self.assertEqual(
+            next_step.path.resolve().parent, first_step.path.resolve().parent
+        )
+
+        self.assertEqual(list_pipeline_steps(self.test_dir), [])
+        first_step.path.mkdir()
+        next_step.path.mkdir()
+        self.assertEqual(
+            list_pipeline_steps(self.test_dir), [first_step, next_step]
         )
 
 

@@ -3,18 +3,21 @@
 
 import logging
 import warnings
+from pathlib import Path
+from typing import Optional, Union
 
 import matplotlib.pyplot as plt
 import pandas as pd
 import yaml
 
+from spectre.Pipelines.Bbh.InitialData import generate_id
 from spectre.Pipelines.EccentricityControl.EccentricityControl import (
     coordinate_separation_eccentricity_control,
 )
 
 # Suppress specific RuntimeWarnings
 warnings.filterwarnings(
-    "ignore", message="Number of calls to functionhas reached maxfev"
+    "ignore", message="Number of calls to function has reached maxfev"
 )
 
 logger = logging.getLogger(__name__)
@@ -23,29 +26,43 @@ logger = logging.getLogger(__name__)
 def eccentricity_control(
     h5_file,
     id_input_file_path,
+    pipeline_dir: Union[str, Path],
     subfile_name_aha="ApparentHorizons/ControlSystemAhA_Centers.dat",
     subfile_name_ahb="ApparentHorizons/ControlSystemAhB_Centers.dat",
     tmin=500,
     tmax=None,  # use all available data
     output=None,  # reads from Inspiral.yaml
+    **scheduler_kwargs,
 ):
     """Eccentricity reduction post inspiral.
 
     This function can be called after the inspiral has run (see the 'Next'
-    section of the Inspiral.yam file).
+    section of the Inspiral.yaml file).
 
     This function does the following:
 
     - Reads orbital parameters from the 'id_input_file_path'.
 
-    - For now, the time boundaries are set to start at 500, and at the end of
-      the simulation to use all available data, but we will make tmin and tmax
-      more dynamic later, so the user can change those variables according to
-      interest.
+    - Sets the time boundaries for the eccentricity reduction process, starting
+      at 500 and using all available data by default, with the option to adjust
+      'tmin' and 'tmax' dynamically.
+
+    - Calls the 'coordinate_separation_eccentricity_control' function to
+      calculate the current eccentricity and extract more accurate orbital
+      parameters.
+
+    - Displays the fit results in a tabular format using a pandas DataFrame.
+
+    - If the eccentricity is below a threshold, it prints "Success" and
+      indicates that the simulation can continue.
+
+    - Generates new initial data based on updated orbital parameters using the
+      'generate_id' function.
 
     Arguments:
       h5_file: file that contains the trajectory data
       id_input_file_path: path to the input file of the initial data run
+      pipeline_dir : directory where the pipeline outputs are stored.
       subfile_name_aha: subfile for black hole A; optional parameter
       subfile_name_ahb: subfile for black hole B; optional parameter
       tmin: starting point for eccentricity reduction script; defaults to
@@ -56,10 +73,18 @@ def eccentricity_control(
     """
     # Read and process the initial data input file
     with open(id_input_file_path, "r") as open_input_file:
-        _, id_input_file = yaml.safe_load_all(open_input_file)
+        id_metadata, id_input_file = yaml.safe_load_all(open_input_file)
     binary_data = id_input_file["Background"]["Binary"]
     orbital_angular_velocity = binary_data["AngularVelocity"]
     radial_expansion_velocity = binary_data["Expansion"]
+    id_params = id_metadata["Next"]["With"]
+    control_params = id_params["control_params"]
+    mass_A = control_params["mass_A"]
+    mass_B = control_params["mass_B"]
+    spin_A = control_params["spin_A"]
+    spin_B = control_params["spin_B"]
+    x_B, x_A = binary_data["XCoords"]
+    separation = x_A - x_B
 
     if output:
         fig = plt.figure()
@@ -117,3 +142,31 @@ def eccentricity_control(
     # Display table
     print(df.to_string(index=False))
     print("=" * 40)
+
+    if fit_result["eccentricity"] < 0.001:
+        print("Success")
+        # Should continue the simulation either by restarting from a
+        # checkpoint, or from the volume data - will do later
+        return
+
+    # Generate new initial data based on updated orbital parameters
+    generate_id(
+        mass_a=mass_A,
+        mass_b=mass_B,
+        dimensionless_spin_a=spin_A,
+        dimensionless_spin_b=spin_B,
+        # Orbital parameters
+        separation=separation,
+        orbital_angular_velocity=fit_result["updated xcts values"]["omega"],
+        radial_expansion_velocity=fit_result["updated xcts values"][
+            "expansion"
+        ],
+        # Scheduling options
+        control=id_params["control"],
+        refinement_level=id_params["control_refinement_level"],
+        polynomial_order=id_params["control_polynomial_order"],
+        evolve=True,
+        eccentricity_control=True,
+        pipeline_dir=pipeline_dir,
+        **scheduler_kwargs,
+    )

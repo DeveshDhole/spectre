@@ -24,6 +24,11 @@ Next:
     subfile_name_ahb: ApparentHorizons/ControlSystemAhB_Centers.dat
     output: ecc_control.pdf
     id_input_file_path: {{id_input_file_path }}
+    pipeline_dir: {{ pipeline_dir }}
+    scheduler: {{ scheduler | default("None") }}
+    copy_executable: {{ copy_executable | default("None") }}
+    submit_script_template: {{ submit_script_template | default("None") }}
+    submit: True
 {% endif %}
 
 ---
@@ -371,6 +376,15 @@ EventsAndTriggersAtSlabs:
         Value: 2.138
     Events:
       - Completion
+  # If running eccentricity control, only run short inspiral
+{% if eccentricity_control %}
+  - Trigger:
+      TimeCompares:
+        Comparison: GreaterThan
+        Value: 2000
+    Events:
+      - Completion
+{% endif %}
 
 EventsAndTriggersAtSteps:
 

@@ -1,6 +1,5 @@
 # Distributed under the MIT License.
 # See LICENSE.txt for details.
-# Unit test for eccentricity control
 
 import logging
 import os
@@ -63,23 +62,50 @@ class TestEccentricityControl(unittest.TestCase):
 
     def create_yaml_file(self):
         # Define YAML data and write it to the file
-        data1 = {
-            "Background": {
-                "Binary": {"AngularVelocity": 0.01, "Expansion": 0.001}
+        metadata = {
+            "Next": {
+                "With": {
+                    "control_params": {
+                        "mass_A": 1.0,
+                        "mass_B": 1.0,
+                        "spin_A": [0.0, 0.0, 0.0],
+                        "spin_B": [0.0, 0.0, 0.0],
+                    },
+                    "refinement_level": 1,
+                    "polynomial_order": 10,
+                }
             }
         }
+
+        data1 = {
+            "Background": {
+                "Binary": {
+                    "AngularVelocity": 0.01,
+                    "Expansion": 0.001,
+                    "XCoords": [10.0, -10.0],  # Example values for XCoords
+                }
+            }
+        }
+
+        # Pass both metadata and data1 to the YAML file
         with open(self.id_input_file_path, "w") as yaml_file:
-            # Keep first dictionary in this list empty to match
-            # the structure of the real file
-            yaml.dump_all([{}, data1], yaml_file)
+            yaml.dump_all([metadata, data1], yaml_file)
 
     # Test the eccentricity control function with the created files
     def test_eccentricity_control(self):
+        output_path = os.path.join(self.test_dir, "output.pdf")
+        # Call the function with updated parameters
         eccentricity_control(
             h5_file=self.h5_filename,
             id_input_file_path=self.id_input_file_path,
+            pipeline_dir=self.test_dir,
             tmin=0,
             tmax=10,
+            output=output_path,
+        )
+        # Add checks if necessary
+        self.assertTrue(
+            os.path.exists(os.path.join(self.test_dir, "output.pdf"))
         )
 
 
