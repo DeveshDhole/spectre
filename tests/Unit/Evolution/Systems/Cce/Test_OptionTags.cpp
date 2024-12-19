@@ -108,13 +108,13 @@ SPECTRE_TEST_CASE("Unit.Evolution.Systems.Cce.OptionTags", "[Unit][Cce]") {
             "100.0") == 100.0);
 
   CHECK(TestHelpers::test_option_tag<Cce::OptionTags::EndTime>("4.0") ==
-        Options::Auto<double>{4.0});
+        std::optional<double>{4.0});
   CHECK(TestHelpers::test_option_tag<Cce::OptionTags::EndTime>("Auto") ==
-        Options::Auto<double>{});
+        std::optional<double>{});
   CHECK(TestHelpers::test_option_tag<Cce::OptionTags::StartTime>("2.0") ==
-        Options::Auto<double>{2.0});
+        std::optional<double>{2.0});
   CHECK(TestHelpers::test_option_tag<Cce::OptionTags::StartTime>("Auto") ==
-        Options::Auto<double>{});
+        std::optional<double>{});
   CHECK(TestHelpers::test_option_tag<Cce::OptionTags::BoundaryDataFilename>(
             "OptionTagsCceR0100.h5") == "OptionTagsCceR0100.h5");
   CHECK(TestHelpers::test_option_tag<
