@@ -33,6 +33,7 @@
 #include "Domain/FunctionsOfTime/PiecewisePolynomial.hpp"
 #include "Domain/FunctionsOfTime/QuaternionFunctionOfTime.hpp"
 #include "Domain/Structure/BlockNeighbor.hpp"
+#include "Domain/Structure/ObjectLabel.hpp"
 #include "Framework/TestCreation.hpp"
 #include "Helpers/DataStructures/MakeWithRandomValues.hpp"
 #include "Helpers/Domain/BoundaryConditions/BoundaryCondition.hpp"
@@ -404,9 +405,9 @@ std::string create_option_string(
           ? "  TimeDependentMaps:\n"
             "    InitialTime: 1.0\n"
             "    ExpansionMap: \n"
-            "      InitialValues: [1.0, -0.1]\n"
+            "      InitialValues: [1.0, -0.1, 0.0]\n"
             "      AsymptoticVelocityOuterBoundary: -0.1\n"
-            "      DecayTimescaleOuterBoundaryVelocity: 5.0\n"
+            "      DecayTimescaleOuterBoundary: 5.0\n"
             "    RotationMap:\n"
             "      InitialAngularVelocity: [0.0, 0.0, -0.2]\n"
             "    TranslationMap:\n"
@@ -839,6 +840,10 @@ void test_parse_errors() {
   // test_connectivity function.
 }
 
+template <domain::ObjectLabel Object>
+using HardcodedShape =
+    domain::creators::time_dependent_options::ShapeMapOptions<true, Object>;
+
 void test_kerr_horizon_conforming() {
   INFO(
       "Check that inner radius is deformed to constant Boyer-Lindquist radius");
@@ -868,18 +873,13 @@ void test_kerr_horizon_conforming() {
       Distribution::Inverse,
       120.,
       domain::creators::bco::TimeDependentMapOptions<false>{
-          0.,
-          std::nullopt,
-          std::nullopt,
-          std::nullopt,
-          {{32_st,
-            domain::creators::time_dependent_options::
-                KerrSchildFromBoyerLindquist{mass_A, spin_A},
-            std::nullopt}},
-          {{32_st,
-            domain::creators::time_dependent_options::
-                KerrSchildFromBoyerLindquist{mass_B, spin_B},
-            std::nullopt}}}};
+          0., std::nullopt, std::nullopt, std::nullopt,
+          HardcodedShape<domain::ObjectLabel::A>{
+              32_st, domain::creators::time_dependent_options::
+                         KerrSchildFromBoyerLindquist{mass_A, spin_A}},
+          HardcodedShape<domain::ObjectLabel::B>{
+              32_st, domain::creators::time_dependent_options::
+                         KerrSchildFromBoyerLindquist{mass_B, spin_B}}}};
   const auto domain = domain_creator.create_domain();
   const auto functions_of_time = domain_creator.functions_of_time();
   // Set up coordinates on an ellipsoid of constant Boyer-Lindquist radius

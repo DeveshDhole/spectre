@@ -5,6 +5,7 @@
 
 #include <array>
 #include <cstddef>
+#include <limits>
 #include <sstream>
 #include <string>
 #include <variant>
@@ -16,7 +17,9 @@
 #include "Domain/FunctionsOfTime/FunctionOfTime.hpp"
 #include "Domain/FunctionsOfTime/PiecewisePolynomial.hpp"
 #include "Domain/FunctionsOfTime/RegisterDerivedWithCharm.hpp"
+#include "Domain/FunctionsOfTime/SettleToConstant.hpp"
 #include "Framework/TestCreation.hpp"
+#include "Helpers/Domain/Creators/TimeDependent/TestHelpers.hpp"
 #include "IO/H5/AccessType.hpp"
 #include "IO/H5/File.hpp"
 #include "IO/H5/TensorData.hpp"
@@ -28,171 +31,230 @@
 #include "Utilities/MakeArray.hpp"
 #include "Utilities/Serialization/Serialize.hpp"
 
+namespace domain::creators::time_dependent_options {
 namespace {
+constexpr double infinity = std::numeric_limits<double>::infinity();
 void test_expansion_map_options() {
   {
-    const auto expansion_map_options = TestHelpers::test_creation<
-        domain::creators::time_dependent_options::ExpansionMapOptions>(
-        "InitialValues: [1.0, 2.0, 3.0]\n"
-        "InitialValuesOuterBoundary: [4.0, 5.0, 6.0]\n"
-        "DecayTimescaleOuterBoundary: 50\n"
-        "DecayTimescale: Auto\n"
-        "AsymptoticVelocityOuterBoundary: -1e-5");
+    INFO("None");
+    const auto expansion_map_options =
+        TestHelpers::test_option_tag<ExpansionMapOptions<false>>("None");
 
-    CHECK(expansion_map_options.name() == "ExpansionMap");
-    CHECK(expansion_map_options.initial_values ==
-          std::array{DataVector{1.0}, DataVector{2.0}, DataVector{3.0}});
-    CHECK(expansion_map_options.initial_values_outer_boundary ==
-          std::array{DataVector{4.0}, DataVector{5.0}, DataVector{6.0}});
-    CHECK(expansion_map_options.decay_timescale_outer_boundary == 50.0);
-    CHECK_FALSE(expansion_map_options.decay_timescale.has_value());
-    CHECK(expansion_map_options.asymptotic_velocity_outer_boundary.has_value());
-    CHECK(expansion_map_options.asymptotic_velocity_outer_boundary.value() ==
-          -1e-5);
+    CHECK(not expansion_map_options.has_value());
   }
-  {
-    const auto expansion_map_options = TestHelpers::test_creation<
-        domain::creators::time_dependent_options::ExpansionMapOptions>(
-        "InitialValues: [1.0, 2.0, 3.0]\n"
-        "InitialValuesOuterBoundary: [4.0, 5.0, 6.0]\n"
-        "DecayTimescaleOuterBoundary: 50\n"
-        "DecayTimescale: 40\n"
-        "AsymptoticVelocityOuterBoundary: Auto");
 
-    CHECK(expansion_map_options.name() == "ExpansionMap");
-    CHECK(expansion_map_options.initial_values ==
-          std::array{DataVector{1.0}, DataVector{2.0}, DataVector{3.0}});
-    CHECK(expansion_map_options.initial_values_outer_boundary ==
+  const auto non_settle_fots = []<bool AllowSettleFoTs>() {
+    INFO("Hardcoded AllowSettleFots = " + std::to_string(AllowSettleFoTs) +
+         ", Non-Settle Fots");
+    const auto expansion_map_options =
+        TestHelpers::test_option_tag<ExpansionMapOptions<AllowSettleFoTs>>(
+            "InitialValues: [1.0, 2.0, 3.0]\n"
+            "DecayTimescaleOuterBoundary: 50\n"
+            "AsymptoticVelocityOuterBoundary: -1e-5");
+
+    REQUIRE(expansion_map_options.has_value());
+    CHECK(std::holds_alternative<ExpansionMapOptions<AllowSettleFoTs>>(
+        expansion_map_options.value()));
+
+    const auto& hardcoded_options =
+        std::get<ExpansionMapOptions<AllowSettleFoTs>>(
+            expansion_map_options.value());
+
+    const std::array expected_values{DataVector{1.0}, DataVector{2.0},
+                                     DataVector{3.0}};
+    CHECK(hardcoded_options.initial_values == expected_values);
+    CHECK(hardcoded_options.initial_values_outer_boundary ==
+          std::array{DataVector{1.0}, DataVector{0.0}, DataVector{0.0}});
+    CHECK(hardcoded_options.decay_timescale_outer_boundary == 50.0);
+    CHECK_FALSE(hardcoded_options.decay_timescale.has_value());
+    CHECK(hardcoded_options.asymptotic_velocity_outer_boundary ==
+          std::optional{-1.e-5});
+
+    const auto expansion_fots =
+        get_expansion(expansion_map_options.value(), 0.3, 2.9);
+    const auto& expansion_ptr = expansion_fots.at("Expansion");
+    const auto& expansion_outer_boundary_ptr =
+        expansion_fots.at("ExpansionOuterBoundary");
+
+    const auto* expansion =
+        dynamic_cast<domain::FunctionsOfTime::PiecewisePolynomial<2>*>(
+            expansion_ptr.get());
+    const auto* expansion_outer_boundary =
+        dynamic_cast<domain::FunctionsOfTime::FixedSpeedCubic*>(
+            expansion_outer_boundary_ptr.get());
+
+    REQUIRE(expansion != nullptr);
+    REQUIRE(expansion_outer_boundary != nullptr);
+
+    CHECK(expansion->time_bounds() == std::array{0.3, 2.9});
+    CHECK(expansion->func_and_2_derivs(0.3) == expected_values);
+    CHECK(expansion_outer_boundary->time_bounds() == std::array{0.3, infinity});
+    CHECK(expansion_outer_boundary->decay_timescale() == 50.0);
+    CHECK(expansion_outer_boundary->velocity() == -1e-5);
+  };
+
+  non_settle_fots.template operator()<false>();
+  non_settle_fots.template operator()<true>();
+
+  {
+    INFO("Hardcoded AllowSettleFots = true, Settle Fots");
+    const auto expansion_map_options =
+        TestHelpers::test_option_tag<ExpansionMapOptions<true>>(
+            "InitialValues: [1.0, 2.0, 3.0]\n"
+            "InitialValuesOuterBoundary: [4.0, 5.0, 6.0]\n"
+            "DecayTimescaleOuterBoundary: 50\n"
+            "DecayTimescale: 40\n");
+
+    REQUIRE(expansion_map_options.has_value());
+    CHECK(std::holds_alternative<ExpansionMapOptions<true>>(
+        expansion_map_options.value()));
+
+    const auto& hardcoded_options =
+        std::get<ExpansionMapOptions<true>>(expansion_map_options.value());
+
+    const std::array expected_values{DataVector{1.0}, DataVector{2.0},
+                                     DataVector{3.0}};
+    CHECK(hardcoded_options.initial_values == expected_values);
+    CHECK(hardcoded_options.initial_values_outer_boundary ==
           std::array{DataVector{4.0}, DataVector{5.0}, DataVector{6.0}});
-    CHECK(expansion_map_options.decay_timescale_outer_boundary == 50.0);
-    CHECK(expansion_map_options.decay_timescale.has_value());
-    CHECK(expansion_map_options.decay_timescale.value() == 40.0);
+    CHECK(hardcoded_options.decay_timescale_outer_boundary == 50.0);
+    CHECK(hardcoded_options.decay_timescale == std::optional{40.0});
     CHECK_FALSE(
-        expansion_map_options.asymptotic_velocity_outer_boundary.has_value());
+        hardcoded_options.asymptotic_velocity_outer_boundary.has_value());
+
+    const auto expansion_fots =
+        get_expansion(expansion_map_options.value(), 0.3, 2.9);
+    const auto& expansion_ptr = expansion_fots.at("Expansion");
+    const auto& expansion_outer_boundary_ptr =
+        expansion_fots.at("ExpansionOuterBoundary");
+
+    const auto* expansion =
+        dynamic_cast<domain::FunctionsOfTime::SettleToConstant*>(
+            expansion_ptr.get());
+    const auto* expansion_outer_boundary =
+        dynamic_cast<domain::FunctionsOfTime::SettleToConstant*>(
+            expansion_outer_boundary_ptr.get());
+
+    REQUIRE(expansion != nullptr);
+    REQUIRE(expansion_outer_boundary != nullptr);
+
+    CHECK(expansion->time_bounds() == std::array{0.3, infinity});
+    CHECK(expansion->func_and_2_derivs(0.3) == expected_values);
+    CHECK(expansion_outer_boundary->time_bounds() == std::array{0.3, infinity});
   }
 
-  CHECK_THROWS_WITH(
-      (TestHelpers::test_creation<
-          domain::creators::time_dependent_options::ExpansionMapOptions>(
-          "InitialValues: [1.0, 2.0, 3.0]\n"
-          "InitialValuesOuterBoundary: [4.0, 5.0, 6.0]\n"
-          "DecayTimescaleOuterBoundary: 50\n"
-          "DecayTimescale: Auto\n"
-          "AsymptoticVelocityOuterBoundary: Auto")),
-      Catch::Matchers::ContainsSubstring(
-          "must specify one of DecayTimescale or "
-          "AsymptoticVelocityOuterBoundary, but not both."));
-  CHECK_THROWS_WITH(
-      (TestHelpers::test_creation<
-          domain::creators::time_dependent_options::ExpansionMapOptions>(
-          "InitialValues: [1.0, 2.0, 3.0]\n"
-          "InitialValuesOuterBoundary: [4.0, 5.0, 6.0]\n"
-          "DecayTimescaleOuterBoundary: 50\n"
-          "DecayTimescale: 40\n"
-          "AsymptoticVelocityOuterBoundary: -1e-5")),
-      Catch::Matchers::ContainsSubstring(
-          "must specify one of DecayTimescale or "
-          "AsymptoticVelocityOuterBoundary, but not both."));
-  CHECK_THROWS_WITH(
-      (TestHelpers::test_creation<
-          domain::creators::time_dependent_options::ExpansionMapOptions>(
-          "InitialValues: [1.0, 2.0, 3.0]\n"
-          "InitialValuesOuterBoundary: [4.0, 5.0, 6.0]\n"
-          "DecayTimescaleOuterBoundary: Auto\n"
-          "DecayTimescale: 40\n"
-          "AsymptoticVelocityOuterBoundary: Auto")),
-      Catch::Matchers::ContainsSubstring(
-          "When specifying the ExpansionMap initial outer "
-          "boundary values directly, you must also specify a "
-          "'DecayTimescaleOuterBoundary'."));
+  const std::string filename{"Commencement.h5"};
+  const std::string subfile_name{"VolumeData"};
+
+  domain::FunctionsOfTimeMap functions_of_time{};
+  functions_of_time["Expansion"] =
+      std::make_unique<domain::FunctionsOfTime::PiecewisePolynomial<2>>(
+          0.0, std::array{DataVector{1.0}, DataVector{2.0}, DataVector{3.0}},
+          100.0);
+  functions_of_time["ExpansionOuterBoundary"] =
+      std::make_unique<domain::FunctionsOfTime::FixedSpeedCubic>(0.0, 0.0,
+                                                                 -1e-5, 50.0);
 
   {
-    std::unordered_map<std::string,
-                       std::unique_ptr<domain::FunctionsOfTime::FunctionOfTime>>
-        functions_of_time{};
+    INFO("FromVolumeFile non-Settle FoTs");
+
+    if (file_system::check_if_file_exists(filename)) {
+      file_system::rm(filename, true);
+    }
+
+    TestHelpers::domain::creators::write_volume_data(filename, subfile_name,
+                                                     functions_of_time);
+
+    const auto expansion_map_options =
+        TestHelpers::test_option_tag<ExpansionMapOptions<false>>(
+            "H5Filename: Commencement.h5\n"
+            "SubfileName: VolumeData");
+
+    REQUIRE(expansion_map_options.has_value());
+    CHECK(
+        std::holds_alternative<FromVolumeFile>(expansion_map_options.value()));
+
+    const auto expansion_fots =
+        get_expansion(expansion_map_options.value(), 0.3, 100.0);
+    const auto& expansion_ptr = expansion_fots.at("Expansion");
+    const auto& expansion_outer_boundary_ptr =
+        expansion_fots.at("ExpansionOuterBoundary");
+
+    const auto* expansion =
+        dynamic_cast<domain::FunctionsOfTime::PiecewisePolynomial<2>*>(
+            expansion_ptr.get());
+    const auto* expansion_outer_boundary =
+        dynamic_cast<domain::FunctionsOfTime::FixedSpeedCubic*>(
+            expansion_outer_boundary_ptr.get());
+
+    REQUIRE(expansion != nullptr);
+    REQUIRE(expansion_outer_boundary != nullptr);
+
+    CHECK(expansion->time_bounds() == std::array{0.3, 100.0});
+    CHECK(expansion->func_and_2_derivs(0.3) ==
+          functions_of_time.at("Expansion")->func_and_2_derivs(0.3));
+    CHECK(
+        expansion_outer_boundary->func_and_2_derivs(0.3) ==
+        functions_of_time.at("ExpansionOuterBoundary")->func_and_2_derivs(0.3));
+    CHECK(expansion_outer_boundary->time_bounds() == std::array{0.0, infinity});
+    CHECK(expansion_outer_boundary->decay_timescale() == 50.0);
+    CHECK(expansion_outer_boundary->velocity() == -1e-5);
+  }
+  {
+    INFO("FromVolumeFile Settle FoTs");
+
+    if (file_system::check_if_file_exists(filename)) {
+      file_system::rm(filename, true);
+    }
+
     functions_of_time["Expansion"] =
-        std::make_unique<domain::FunctionsOfTime::PiecewisePolynomial<2>>(
-            0.0, std::array{DataVector{1.0}, DataVector{2.0}, DataVector{3.0}},
+        std::make_unique<domain::FunctionsOfTime::SettleToConstant>(
+            std::array{DataVector{1.0}, DataVector{2.0}, DataVector{3.0}}, 0.0,
             100.0);
     functions_of_time["ExpansionOuterBoundary"] =
-        std::make_unique<domain::FunctionsOfTime::FixedSpeedCubic>(0.0, 0.0,
-                                                                   -1e-5, 50.0);
-    const std::string filename{"Commencement.h5"};
-    const std::string subfile_name{"VolumeData"};
-    if (file_system::check_if_file_exists(filename)) {
-      file_system::rm(filename, true);
-    }
+        std::make_unique<domain::FunctionsOfTime::SettleToConstant>(
+            std::array{DataVector{3.0}, DataVector{4.0}, DataVector{6.0}}, 0.0,
+            100.0);
 
-    {
-      h5::H5File<h5::AccessType::ReadWrite> h5_file{filename};
-      auto& vol_file = h5_file.insert<h5::VolumeData>(subfile_name);
+    TestHelpers::domain::creators::write_volume_data(filename, subfile_name,
+                                                     functions_of_time);
 
-      // We don't care about the volume data here, just the functions of time
-      vol_file.write_volume_data(
-          0, 0.0,
-          {ElementVolumeData{
-              "blah",
-              {TensorComponent{"RandomTensor", DataVector{3, 0.0}}},
-              {3},
-              {Spectral::Basis::Legendre},
-              {Spectral::Quadrature::GaussLobatto}}},
-          std::nullopt, serialize(functions_of_time));
-    }
+    const auto expansion_map_options =
+        TestHelpers::test_option_tag<ExpansionMapOptions<true>>(
+            "H5Filename: Commencement.h5\n"
+            "SubfileName: VolumeData");
 
-    {
-      const auto expansion_map_options = TestHelpers::test_creation<
-          domain::creators::time_dependent_options::ExpansionMapOptions>(
-          "DecayTimescaleOuterBoundary: 60\n"
-          "DecayTimescale: Auto\n"
-          "AsymptoticVelocityOuterBoundary: -2e-5\n"
-          "InitialValues:\n"
-          "  H5Filename: " +
-          filename + "\n  SubfileName: " + subfile_name +
-          "\n  Time: 0.0\n"
-          "InitialValuesOuterBoundary:\n"
-          "  H5Filename: " +
-          filename + "\n  SubfileName: " + subfile_name + "\n  Time: 0.0");
-      CHECK(expansion_map_options.name() == "ExpansionMap");
-      CHECK(expansion_map_options.initial_values ==
-            std::array{DataVector{1.0}, DataVector{2.0}, DataVector{3.0}});
-      CHECK(expansion_map_options.initial_values_outer_boundary ==
-            std::array{DataVector{0.0}, DataVector{0.0}, DataVector{0.0}});
-      CHECK(expansion_map_options.decay_timescale_outer_boundary == 60.0);
-      CHECK_FALSE(expansion_map_options.decay_timescale.has_value());
-      CHECK(
-          expansion_map_options.asymptotic_velocity_outer_boundary.has_value());
-      CHECK(expansion_map_options.asymptotic_velocity_outer_boundary.value() ==
-            -2e-5);
-    }
-    {
-      const auto expansion_map_options = TestHelpers::test_creation<
-          domain::creators::time_dependent_options::ExpansionMapOptions>(
-          "DecayTimescaleOuterBoundary: Auto\n"
-          "DecayTimescale: Auto\n"
-          "AsymptoticVelocityOuterBoundary: Auto\n"
-          "InitialValues:\n"
-          "  H5Filename: " +
-          filename + "\n  SubfileName: " + subfile_name +
-          "\n  Time: 0.0\n"
-          "InitialValuesOuterBoundary:\n"
-          "  H5Filename: " +
-          filename + "\n  SubfileName: " + subfile_name + "\n  Time: 0.0");
-      CHECK(expansion_map_options.name() == "ExpansionMap");
-      CHECK(expansion_map_options.initial_values ==
-            std::array{DataVector{1.0}, DataVector{2.0}, DataVector{3.0}});
-      CHECK(expansion_map_options.initial_values_outer_boundary ==
-            std::array{DataVector{0.0}, DataVector{0.0}, DataVector{0.0}});
-      CHECK(expansion_map_options.decay_timescale_outer_boundary == 50.0);
-      CHECK_FALSE(expansion_map_options.decay_timescale.has_value());
-      CHECK(
-          expansion_map_options.asymptotic_velocity_outer_boundary.has_value());
-      CHECK(expansion_map_options.asymptotic_velocity_outer_boundary.value() ==
-            -1e-5);
-    }
+    REQUIRE(expansion_map_options.has_value());
+    CHECK(
+        std::holds_alternative<FromVolumeFile>(expansion_map_options.value()));
 
-    if (file_system::check_if_file_exists(filename)) {
-      file_system::rm(filename, true);
-    }
+    const auto expansion_fots =
+        get_expansion(expansion_map_options.value(), 0.3, 100.0);
+    const auto& expansion_ptr = expansion_fots.at("Expansion");
+    const auto& expansion_outer_boundary_ptr =
+        expansion_fots.at("ExpansionOuterBoundary");
+
+    const auto* expansion =
+        dynamic_cast<domain::FunctionsOfTime::SettleToConstant*>(
+            expansion_ptr.get());
+    const auto* expansion_outer_boundary =
+        dynamic_cast<domain::FunctionsOfTime::SettleToConstant*>(
+            expansion_outer_boundary_ptr.get());
+
+    REQUIRE(expansion != nullptr);
+    REQUIRE(expansion_outer_boundary != nullptr);
+
+    CHECK(expansion->time_bounds() == std::array{0.0, infinity});
+    CHECK(expansion->func_and_2_derivs(0.3) ==
+          functions_of_time.at("Expansion")->func_and_2_derivs(0.3));
+    CHECK(
+        expansion_outer_boundary->func_and_2_derivs(0.3) ==
+        functions_of_time.at("ExpansionOuterBoundary")->func_and_2_derivs(0.3));
+    CHECK(expansion_outer_boundary->time_bounds() == std::array{0.0, infinity});
+  }
+
+  if (file_system::check_if_file_exists(filename)) {
+    file_system::rm(filename, true);
   }
 }
 }  // namespace
@@ -202,3 +264,4 @@ SPECTRE_TEST_CASE("Unit.Domain.Creators.TimeDependentOptions.ExpansionMap",
   domain::FunctionsOfTime::register_derived_with_charm();
   test_expansion_map_options();
 }
+}  // namespace domain::creators::time_dependent_options

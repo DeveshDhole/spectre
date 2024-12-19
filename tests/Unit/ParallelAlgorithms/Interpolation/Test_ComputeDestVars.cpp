@@ -11,10 +11,12 @@
 #include "DataStructures/Variables.hpp"
 #include "Domain/Creators/Sphere.hpp"
 #include "Domain/Creators/Tags/FunctionsOfTime.hpp"
+#include "Domain/Creators/TimeDependentOptions/ShapeMap.hpp"
 #include "Domain/Creators/TimeDependentOptions/Sphere.hpp"
 #include "Domain/FunctionsOfTime/FunctionOfTime.hpp"
 #include "Domain/FunctionsOfTime/RegisterDerivedWithCharm.hpp"
 #include "Domain/Structure/ElementId.hpp"
+#include "Domain/Structure/ObjectLabel.hpp"
 #include "Framework/ActionTesting.hpp"
 #include "NumericalAlgorithms/Spectral/Mesh.hpp"
 #include "Parallel/GlobalCache.hpp"
@@ -108,9 +110,13 @@ void test() {
   domain::FunctionsOfTime::register_derived_with_charm();
 
   using TDMO = domain::creators::sphere::TimeDependentMapOptions;
-  TDMO time_dep_opts{0.0,          TDMO::ShapeMapOptions{2, std::nullopt},
-                     std::nullopt, std::nullopt,
-                     std::nullopt, true};
+  TDMO time_dep_opts{0.0,
+                     domain::creators::time_dependent_options::ShapeMapOptions<
+                         false, domain::ObjectLabel::None>{2, std::nullopt},
+                     std::nullopt,
+                     std::nullopt,
+                     std::nullopt,
+                     true};
 
   const auto domain_creator = domain::creators::Sphere(
       0.9, 4.9, domain::creators::Sphere::Excision{}, 1_st, 7_st, false, {},

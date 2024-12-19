@@ -18,6 +18,7 @@
 #include "Domain/Creators/Tags/Domain.hpp"
 #include "Domain/Creators/Tags/FunctionsOfTime.hpp"
 #include "Domain/Creators/TimeDependentOptions/BinaryCompactObject.hpp"
+#include "Domain/Creators/TimeDependentOptions/RotationMap.hpp"
 #include "Domain/FunctionsOfTime/RegisterDerivedWithCharm.hpp"
 #include "Domain/Structure/ObjectLabel.hpp"
 #include "Framework/ActionTesting.hpp"
@@ -323,7 +324,7 @@ SPECTRE_TEST_CASE("Unit.ControlSystem.FindTwoCenters",
   const domain::creators::bco::TimeDependentMapOptions<false> time_dep_opts{
       0.0,
       std::nullopt,
-      domain::creators::bco::TimeDependentMapOptions<false>::RotationMapOptions{
+      domain::creators::time_dependent_options::RotationMapOptions<false>{
           std::array{0.0, 0.0, 0.1}},
       std::nullopt,
       std::nullopt,

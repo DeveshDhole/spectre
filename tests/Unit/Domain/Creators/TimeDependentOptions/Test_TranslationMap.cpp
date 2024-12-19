@@ -16,6 +16,7 @@
 #include "Domain/FunctionsOfTime/PiecewisePolynomial.hpp"
 #include "Domain/FunctionsOfTime/RegisterDerivedWithCharm.hpp"
 #include "Framework/TestCreation.hpp"
+#include "Helpers/Domain/Creators/TimeDependent/TestHelpers.hpp"
 #include "IO/H5/AccessType.hpp"
 #include "IO/H5/File.hpp"
 #include "IO/H5/TensorData.hpp"
@@ -27,6 +28,7 @@
 #include "Utilities/MakeArray.hpp"
 #include "Utilities/Serialization/Serialize.hpp"
 
+namespace domain::creators::time_dependent_options {
 namespace {
 template <size_t Dim>
 std::string make_array_str(const double value) {
@@ -46,16 +48,41 @@ std::string make_array_str(const double value) {
 template <size_t Dim>
 void test_translation_map_options() {
   {
-    const auto translation_map_options = TestHelpers::test_creation<
+    INFO("None");
+    const auto translation_map_options =
+        TestHelpers::test_option_tag<TranslationMapOptions<Dim>>("None");
+
+    CHECK(not translation_map_options.has_value());
+  }
+  {
+    INFO("Hardcoded options");
+    const auto translation_map_options = TestHelpers::test_option_tag<
         domain::creators::time_dependent_options::TranslationMapOptions<Dim>>(
         "InitialValues: [" + make_array_str<Dim>(1.0) + "," +
         make_array_str<Dim>(2.0) + "," + make_array_str<Dim>(3.0) + "]");
-    CHECK(translation_map_options.name() == "TranslationMap");
-    CHECK(translation_map_options.initial_values ==
-          std::array{DataVector{Dim, 1.0}, DataVector{Dim, 2.0},
-                     DataVector{Dim, 3.0}});
+
+    REQUIRE(translation_map_options.has_value());
+    CHECK(std::holds_alternative<TranslationMapOptions<Dim>>(
+        translation_map_options.value()));
+    const std::array initial_values{DataVector{Dim, 1.0}, DataVector{Dim, 2.0},
+                                    DataVector{Dim, 3.0}};
+    CHECK(std::get<TranslationMapOptions<Dim>>(translation_map_options.value())
+              .initial_values == initial_values);
+
+    const auto translation_ptr =
+        get_translation(translation_map_options.value(), 0.1, 65.8);
+
+    const auto* translation =
+        dynamic_cast<domain::FunctionsOfTime::PiecewisePolynomial<2>*>(
+            translation_ptr.get());
+
+    CHECK(translation != nullptr);
+
+    CHECK(translation->time_bounds() == std::array{0.1, 65.8});
+    CHECK(translation->func_and_2_derivs(0.1) == initial_values);
   }
   {
+    INFO("FromVolumeFile");
     std::unordered_map<std::string,
                        std::unique_ptr<domain::FunctionsOfTime::FunctionOfTime>>
         functions_of_time{};
@@ -71,31 +98,32 @@ void test_translation_map_options() {
       file_system::rm(filename, true);
     }
 
-    {
-      h5::H5File<h5::AccessType::ReadWrite> h5_file{filename};
-      auto& vol_file = h5_file.insert<h5::VolumeData>(subfile_name);
+    TestHelpers::domain::creators::write_volume_data(filename, subfile_name,
+                                                     functions_of_time);
 
-      // We don't care about the volume data here, just the functions of time
-      vol_file.write_volume_data(
-          0, 0.0,
-          {ElementVolumeData{
-              "blah",
-              {TensorComponent{"RandomTensor", DataVector{3, 0.0}}},
-              {3},
-              {Spectral::Basis::Legendre},
-              {Spectral::Quadrature::GaussLobatto}}},
-          std::nullopt, serialize(functions_of_time));
-    }
-
-    const auto translation_map_options = TestHelpers::test_creation<
+    const auto translation_map_options = TestHelpers::test_option_tag<
         domain::creators::time_dependent_options::TranslationMapOptions<Dim>>(
-        "InitialValues:\n"
-        "  H5Filename: " +
-        filename + "\n  SubfileName: " + subfile_name + "\n  Time: 0.0");
-    CHECK(translation_map_options.name() == "TranslationMap");
-    CHECK(translation_map_options.initial_values ==
-          std::array{DataVector{Dim, 1.0}, DataVector{Dim, 2.0},
-                     DataVector{Dim, 3.0}});
+        "H5Filename: " + filename + "\nSubfileName: " + subfile_name);
+
+    REQUIRE(translation_map_options.has_value());
+    CHECK(std::holds_alternative<FromVolumeFile>(
+        translation_map_options.value()));
+    const std::array initial_values{DataVector{Dim, 1.0}, DataVector{Dim, 2.0},
+                                    DataVector{Dim, 3.0}};
+
+    const auto translation_ptr =
+        get_translation(translation_map_options.value(), 0.1, 65.8);
+
+    const auto* translation =
+        dynamic_cast<domain::FunctionsOfTime::PiecewisePolynomial<2>*>(
+            translation_ptr.get());
+
+    CHECK(translation != nullptr);
+
+    CHECK(translation->time_bounds() == std::array{0.1, 65.8});
+    CHECK_ITERABLE_APPROX(
+        translation->func_and_2_derivs(0.3),
+        functions_of_time.at("Translation")->func_and_2_derivs(0.3));
 
     if (file_system::check_if_file_exists(filename)) {
       file_system::rm(filename, true);
@@ -111,3 +139,4 @@ SPECTRE_TEST_CASE("Unit.Domain.Creators.TimeDependentOptions.TranslationMap",
   test_translation_map_options<2>();
   test_translation_map_options<3>();
 }
+}  // namespace domain::creators::time_dependent_options

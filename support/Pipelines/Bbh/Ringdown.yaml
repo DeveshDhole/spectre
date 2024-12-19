@@ -65,13 +65,13 @@ DomainCreator:
         # and has not been tested for other configurations.
         SizeInitialValues: [0.0, -1.0, 0.0]
       RotationMap:
-        InitialValues:
+        InitialQuaternions:
           - [{{ Rotation0 }}, {{ Rotation1 }}, {{ Rotation2 }}, {{ Rotation3 }}]
           - [{{ dtRotation0 }}, {{ dtRotation1 }}, {{ dtRotation2 }},
              {{ dtRotation3 }}]
           - [{{ dt2Rotation0 }}, {{ dt2Rotation1 }}, {{ dt2Rotation2}},
              {{ dt2Rotation3 }}]
-        DecayTimescaleRotation: 1.0
+        DecayTimescale: 1.0
       ExpansionMap:
         # During the ringdown, only the outer boundary's expansion map is
         # applied.
@@ -79,8 +79,8 @@ DomainCreator:
         InitialValuesOuterBoundary: [{{ ExpansionOuterBdry }},
                                      {{ dtExpansionOuterBdry }},
                                      {{ dt2ExpansionOuterBdry }}]
-        DecayTimescaleExpansion: 1.0
-        DecayTimescaleExpansionOuterBoundary: 1.0
+        DecayTimescale: 1.0
+        DecayTimescaleOuterBoundary: 1.0
       TranslationMap:
         InitialValues: [[0.0, 0.0, 0.0], [0.0, 0.0, 0.0], [0.0, 0.0, 0.0]]
       TransitionRotScaleTrans: True

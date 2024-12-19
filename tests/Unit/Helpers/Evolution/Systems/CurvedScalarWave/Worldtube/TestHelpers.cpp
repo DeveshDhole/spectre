@@ -65,11 +65,11 @@ std::unique_ptr<DomainCreator<3>> worldtube_binary_compact_object(
       "  TimeDependentMaps:\n"
       "    InitialTime: 0.0\n"
       "    ExpansionMap: \n"
-      "      InitialValues: [1.0, 0.0]\n"
+      "      InitialValues: [1.0, 0.0, 0.0]\n"
       "      AsymptoticVelocityOuterBoundary: 0.0\n"
-      "      DecayTimescaleOuterBoundaryVelocity: 1.0\n"
+      "      DecayTimescaleOuterBoundary: 1.0\n"
       "    RotationMap:\n"
-      "      InitialAngularVelocity: [0.0, 0.0," +
+      "      InitialAngularVelocity: [0.0, 0.0, " +
       angular_velocity_stream.str() +
       "]\n"
       "    TranslationMap: None\n"

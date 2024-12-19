@@ -1,11 +1,9 @@
 // Distributed under the MIT License.
 // See LICENSE.txt for details.
 
-#include "DataStructures/DataVector.hpp"
 #include "Framework/TestingFramework.hpp"
 
 #include <array>
-#include <catch2/matchers/catch_matchers_string.hpp>
 #include <fstream>
 #include <iomanip>
 #include <ios>
@@ -13,8 +11,11 @@
 #include <random>
 #include <string>
 #include <unordered_map>
+#include <variant>
 #include <vector>
 
+#include "DataStructures/DataVector.hpp"
+#include "Domain/Creators/TimeDependentOptions/FromVolumeFile.hpp"
 #include "Domain/Creators/TimeDependentOptions/ShapeMap.hpp"
 #include "Domain/FunctionsOfTime/FunctionOfTime.hpp"
 #include "Domain/FunctionsOfTime/PiecewisePolynomial.hpp"
@@ -23,6 +24,7 @@
 #include "Framework/TestCreation.hpp"
 #include "Framework/TestHelpers.hpp"
 #include "Helpers/DataStructures/MakeWithRandomValues.hpp"
+#include "Helpers/Domain/Creators/TimeDependent/TestHelpers.hpp"
 #include "IO/H5/AccessType.hpp"
 #include "IO/H5/Dat.hpp"
 #include "IO/H5/File.hpp"
@@ -35,6 +37,7 @@
 #include "Utilities/FileSystem.hpp"
 #include "Utilities/Gsl.hpp"
 
+namespace domain::creators::time_dependent_options {
 namespace {
 void test_kerr_schild_boyer_lindquist() {
   const auto kerr_schild_boyer_lindquist = TestHelpers::test_creation<
@@ -65,109 +68,46 @@ void test_ylms_from_file() {
   CHECK_FALSE(ylms_from_file.set_l1_coefs_to_zero);
 }
 
-void test_shape_map_options() {
-  {
-    constexpr bool include_transition_ends_at_cube = false;
-    constexpr domain::ObjectLabel object_label = domain::ObjectLabel::A;
-    CAPTURE(include_transition_ends_at_cube);
-    CAPTURE(object_label);
-    const auto shape_map_options = TestHelpers::test_creation<
-        domain::creators::time_dependent_options::ShapeMapOptions<
-            include_transition_ends_at_cube, object_label>>(
-        "LMax: 8\n"
-        "InitialValues: Spherical\n"
-        "SizeInitialValues: [0.5, 1.0, 2.4]");
-    CHECK(shape_map_options.name() == "ShapeMapA");
-    CHECK(shape_map_options.l_max == 8);
-    CHECK_FALSE(shape_map_options.initial_values.has_value());
-    CHECK(shape_map_options.initial_size_values.has_value());
-    CHECK(shape_map_options.initial_size_values.value() ==
-          std::array{0.5, 1.0, 2.4});
-    CHECK_FALSE(shape_map_options.transition_ends_at_cube);
-  }
-  {
-    constexpr bool include_transition_ends_at_cube = true;
-    constexpr domain::ObjectLabel object_label = domain::ObjectLabel::B;
-    CAPTURE(include_transition_ends_at_cube);
-    CAPTURE(object_label);
-    const auto shape_map_options = TestHelpers::test_creation<
-        domain::creators::time_dependent_options::ShapeMapOptions<
-            include_transition_ends_at_cube, object_label>>(
-        "LMax: 8\n"
-        "InitialValues:\n"
-        "  Mass: 1.7\n"
-        "  Spin: [0.45, 0.12, 0.34]\n"
-        "SizeInitialValues: Auto\n"
-        "TransitionEndsAtCube: True");
-    CHECK(shape_map_options.name() == "ShapeMapB");
-    CHECK(shape_map_options.l_max == 8);
-    CHECK(shape_map_options.initial_values.has_value());
-    CHECK(std::holds_alternative<domain::creators::time_dependent_options::
-                                     KerrSchildFromBoyerLindquist>(
-        shape_map_options.initial_values.value()));
-    CHECK_FALSE(shape_map_options.initial_size_values.has_value());
-    CHECK(shape_map_options.transition_ends_at_cube);
-  }
-  {
-    constexpr bool include_transition_ends_at_cube = false;
-    constexpr domain::ObjectLabel object_label = domain::ObjectLabel::None;
-    CAPTURE(include_transition_ends_at_cube);
-    CAPTURE(object_label);
-    const auto shape_map_options = TestHelpers::test_creation<
-        domain::creators::time_dependent_options::ShapeMapOptions<
-            include_transition_ends_at_cube, object_label>>(
-        "LMax: 8\n"
-        "InitialValues:\n"
-        "  H5Filename: TotalEclipseOfTheHeart.h5\n"
-        "  SubfileNames:\n"
-        "    - Ylm_coefs\n"
-        "  MatchTime: 1.7\n"
-        "  MatchTimeEpsilon: Auto\n"
-        "  SetL1CoefsToZero: True\n"
-        "  CheckFrame: True\n"
-        "SizeInitialValues: Auto");
-    CHECK(shape_map_options.name() == "ShapeMap");
-    CHECK(shape_map_options.l_max == 8);
-    CHECK(shape_map_options.initial_values.has_value());
-    CHECK(std::holds_alternative<
-          domain::creators::time_dependent_options::YlmsFromFile>(
-        shape_map_options.initial_values.value()));
-    CHECK_FALSE(shape_map_options.initial_size_values.has_value());
-    CHECK_FALSE(shape_map_options.transition_ends_at_cube);
-  }
-  {
-    constexpr bool include_transition_ends_at_cube = false;
-    constexpr domain::ObjectLabel object_label = domain::ObjectLabel::None;
-    CAPTURE(include_transition_ends_at_cube);
-    CAPTURE(object_label);
-    const auto shape_map_options = TestHelpers::test_creation<
-        domain::creators::time_dependent_options::ShapeMapOptions<
-            include_transition_ends_at_cube, object_label>>(
-        "LMax: 8\n"
-        "InitialValues:\n"
-        "  DatFilename: PartialEclipseOfTheHeart.dat\n"
-        "  MatchTime: 1.7\n"
-        "  MatchTimeEpsilon: Auto\n"
-        "  SetL1CoefsToZero: True\n"
-        "SizeInitialValues: Auto");
-    CHECK(shape_map_options.name() == "ShapeMap");
-    CHECK(shape_map_options.l_max == 8);
-    CHECK(shape_map_options.initial_values.has_value());
-    CHECK(std::holds_alternative<
-          domain::creators::time_dependent_options::YlmsFromSpEC>(
-        shape_map_options.initial_values.value()));
-    CHECK_FALSE(shape_map_options.initial_size_values.has_value());
-    CHECK_FALSE(shape_map_options.transition_ends_at_cube);
-  }
-}
-
 template <typename Generator>
 void test_funcs(const gsl::not_null<Generator*> generator) {
   const double inner_radius = 0.5;
   const size_t l_max = 8;
+  {
+    INFO("None");
+    const auto shape_map_options = TestHelpers::test_option_tag<
+        ShapeMapOptions<false, domain::ObjectLabel::None>>("None");
+
+    CHECK(not shape_map_options.has_value());
+  }
+  {
+    INFO("Spherical");
+    const auto shape_map_options = TestHelpers::test_option_tag<
+        ShapeMapOptions<false, domain::ObjectLabel::None>>(
+        "LMax: 8\n"
+        "InitialValues: Spherical\n"
+        "SizeInitialValues: Auto\n");
+
+    REQUIRE(shape_map_options.has_value());
+    REQUIRE(std::holds_alternative<
+            ShapeMapOptions<false, domain::ObjectLabel::None>>(
+        shape_map_options.value()));
+
+    const FunctionsOfTimeMap shape_and_size = get_shape_and_size(
+        shape_map_options.value(), 0.1, 0.8, 0.9, inner_radius);
+
+    CHECK(shape_and_size.at("Shape")->time_bounds() == std::array{0.1, 0.8});
+    CHECK(shape_and_size.at("Size")->time_bounds() == std::array{0.1, 0.9});
+
+    CHECK(shape_and_size.at("Shape")->func_and_2_derivs(0.1) ==
+          make_array<3>(
+              DataVector{ylm::Spherepack::spectral_size(l_max, l_max), 0.0}));
+    CHECK(shape_and_size.at("Size")->func_and_2_derivs(0.1) ==
+          make_array<3>(DataVector{0.0}));
+  }
   // We choose a Schwarzschild BH so all coefs are zero and it's easy to check
   {
-    const auto shape_map_options = TestHelpers::test_creation<
+    INFO("KerrSchild");
+    const auto shape_map_options = TestHelpers::test_option_tag<
         domain::creators::time_dependent_options::ShapeMapOptions<
             false, domain::ObjectLabel::None>>(
         "LMax: 8\n"
@@ -176,37 +116,22 @@ void test_funcs(const gsl::not_null<Generator*> generator) {
         "  Spin: [0.0, 0.0, 0.0]\n"
         "SizeInitialValues: [0.5, 1.0, 2.4]");
 
-    const auto [shape_funcs, size_funcs] =
-        domain::creators::time_dependent_options::initial_shape_and_size_funcs(
-            shape_map_options, inner_radius);
+    REQUIRE(shape_map_options.has_value());
+    REQUIRE(std::holds_alternative<
+            ShapeMapOptions<false, domain::ObjectLabel::None>>(
+        shape_map_options.value()));
 
-    for (size_t i = 0; i < shape_funcs.size(); i++) {
-      CHECK(gsl::at(shape_funcs, i) ==
-            DataVector{ylm::Spherepack::spectral_size(l_max, l_max), 0.0});
-    }
-    CHECK(size_funcs == std::array{DataVector{0.5}, DataVector{1.0},
-                                   DataVector{2.4}, DataVector{0.0}});
-  }
-  {
-    const auto shape_map_options = TestHelpers::test_creation<
-        domain::creators::time_dependent_options::ShapeMapOptions<
-            false, domain::ObjectLabel::None>>(
-        "LMax: 8\n"
-        "InitialValues:\n"
-        "  Mass: 1.0\n"
-        "  Spin: [0.0, 0.0, 0.0]\n"
-        "SizeInitialValues: Auto");
+    const FunctionsOfTimeMap shape_and_size = get_shape_and_size(
+        shape_map_options.value(), 0.1, 0.8, 0.9, inner_radius);
 
-    const auto [shape_funcs, size_funcs] =
-        domain::creators::time_dependent_options::initial_shape_and_size_funcs(
-            shape_map_options, inner_radius);
+    CHECK(shape_and_size.at("Shape")->time_bounds() == std::array{0.1, 0.8});
+    CHECK(shape_and_size.at("Size")->time_bounds() == std::array{0.1, 0.9});
 
-    for (size_t i = 0; i < shape_funcs.size(); i++) {
-      CHECK(gsl::at(shape_funcs, i) ==
-            DataVector{ylm::Spherepack::spectral_size(l_max, l_max), 0.0});
-    }
-    CHECK(size_funcs == std::array{DataVector{0.0}, DataVector{0.0},
-                                   DataVector{0.0}, DataVector{0.0}});
+    CHECK(shape_and_size.at("Shape")->func_and_2_derivs(0.1) ==
+          make_array<3>(
+              DataVector{ylm::Spherepack::spectral_size(l_max, l_max), 0.0}));
+    CHECK(shape_and_size.at("Size")->func_and_2_derivs(0.1) ==
+          std::array{DataVector{0.5}, DataVector{1.0}, DataVector{2.4}});
   }
   {
     const std::string test_filename{"TotalEclipseOfTheHeart.h5"};
@@ -261,9 +186,10 @@ void test_funcs(const gsl::not_null<Generator*> generator) {
                        std::unique_ptr<domain::FunctionsOfTime::FunctionOfTime>>
         functions_of_time{};
     {
-      const auto shape_map_options = TestHelpers::test_creation<
+      INFO("YlmsFromFile specify size");
+      const auto shape_map_options = TestHelpers::test_option_tag<
           domain::creators::time_dependent_options::ShapeMapOptions<
-              false, domain::ObjectLabel::None>>(
+              true, domain::ObjectLabel::B>>(
           "LMax: 8\n"
           "InitialValues:\n"
           "  H5Filename: TotalEclipseOfTheHeart.h5\n"
@@ -274,11 +200,26 @@ void test_funcs(const gsl::not_null<Generator*> generator) {
           "  MatchTimeEpsilon: Auto\n"
           "  SetL1CoefsToZero: True\n"
           "  CheckFrame: False\n"
-          "SizeInitialValues: [1.1, 2.2, 3.3]");
+          "SizeInitialValues: [1.1, 2.2, 3.3]\n"
+          "TransitionEndsAtCube: True");
 
-      const auto [shape_funcs, size_funcs] =
-          domain::creators::time_dependent_options::
-              initial_shape_and_size_funcs(shape_map_options, inner_radius);
+      REQUIRE(shape_map_options.has_value());
+      REQUIRE(
+          std::holds_alternative<ShapeMapOptions<true, domain::ObjectLabel::B>>(
+              shape_map_options.value()));
+
+      const FunctionsOfTimeMap shape_and_size = get_shape_and_size(
+          shape_map_options.value(), 0.1, 0.8, 0.9, inner_radius);
+
+      CHECK(shape_and_size.at(shape_name)->time_bounds() ==
+            std::array{0.1, 0.8});
+      CHECK(shape_and_size.at(size_name)->time_bounds() ==
+            std::array{0.1, 0.9});
+
+      const auto shape_funcs =
+          shape_and_size.at(shape_name)->func_and_2_derivs(0.1);
+      const auto size_funcs =
+          shape_and_size.at(size_name)->func_and_2_derivs(0.1);
 
       ylm::SpherepackIterator iter{l_max, l_max};
       ylm::SpherepackIterator file_iter{file_l_max, file_l_max};
@@ -301,63 +242,25 @@ void test_funcs(const gsl::not_null<Generator*> generator) {
           }
         }
       }
-      CHECK(size_funcs == std::array{DataVector{1.1}, DataVector{2.2},
-                                     DataVector{3.3}, DataVector{0.0}});
+      CHECK(size_funcs ==
+            std::array{DataVector{1.1}, DataVector{2.2}, DataVector{3.3}});
 
       functions_of_time[shape_name] =
-          std::make_unique<domain::FunctionsOfTime::PiecewisePolynomial<2>>(
-              time, shape_funcs, 100.0);
-      functions_of_time[size_name] =
-          std::make_unique<domain::FunctionsOfTime::PiecewisePolynomial<3>>(
-              time, size_funcs, 100.0);
-      {
-        h5::H5File<h5::AccessType::ReadWrite> test_file(test_filename, true);
-        auto& vol_file = test_file.insert<h5::VolumeData>(volume_subfile_name);
+          shape_and_size.at(shape_name)->get_clone();
+      functions_of_time[size_name] = shape_and_size.at(size_name)->get_clone();
 
-        // We don't care about the volume data here, just the functions of time
-        vol_file.write_volume_data(
-            0, 0.0,
-            {ElementVolumeData{
-                "blah",
-                {TensorComponent{"RandomTensor", DataVector{3, 0.0}}},
-                {3},
-                {Spectral::Basis::Legendre},
-                {Spectral::Quadrature::GaussLobatto}}},
-            std::nullopt, serialize(functions_of_time));
-      }
-    }
-
-    {
-      const auto shape_map_options = TestHelpers::test_creation<
-          domain::creators::time_dependent_options::ShapeMapOptions<
-              false, domain::ObjectLabel::B>>(
-          "LMax: 8\n"
-          "InitialValues:\n"
-          "  H5Filename: TotalEclipseOfTheHeart.h5\n"
-          "  SubfileName: VolumeData\n"
-          "  Time: 1.7\n"
-          "SizeInitialValues: Auto");
-
-      const auto [shape_funcs, size_funcs] =
-          domain::creators::time_dependent_options::
-              initial_shape_and_size_funcs(shape_map_options, inner_radius);
-
-      CHECK(shape_funcs ==
-            functions_of_time.at(shape_name)->func_and_2_derivs(time));
-      auto all_size_funcs =
-          functions_of_time.at(size_name)->func_and_all_derivs(time);
-      CHECK(all_size_funcs.size() == size_funcs.size());
-      for (size_t i = 0; i < size_funcs.size(); i++) {
-        CHECK(all_size_funcs[i] == gsl::at(size_funcs, i));
-      }
+      // For the FromVolumeFile test later on
+      TestHelpers::domain::creators::write_volume_data(
+          test_filename, volume_subfile_name, functions_of_time);
     }
 
     // Already checked that shape funcs are correct. Here just check that size
     // funcs were automatically set to correct values
     {
-      const auto shape_map_options = TestHelpers::test_creation<
+      INFO("YlmsFromFile auto size");
+      const auto shape_map_options = TestHelpers::test_option_tag<
           domain::creators::time_dependent_options::ShapeMapOptions<
-              false, domain::ObjectLabel::None>>(
+              true, domain::ObjectLabel::B>>(
           "LMax: 8\n"
           "InitialValues:\n"
           "  H5Filename: TotalEclipseOfTheHeart.h5\n"
@@ -368,17 +271,19 @@ void test_funcs(const gsl::not_null<Generator*> generator) {
           "  MatchTimeEpsilon: Auto\n"
           "  SetL1CoefsToZero: True\n"
           "  CheckFrame: False\n"
-          "SizeInitialValues: Auto");
+          "SizeInitialValues: Auto\n"
+          "TransitionEndsAtCube: true");
 
-      const auto [shape_funcs, size_funcs] =
-          domain::creators::time_dependent_options::
-              initial_shape_and_size_funcs(shape_map_options, inner_radius);
+      REQUIRE(shape_map_options.has_value());
+      REQUIRE(
+          std::holds_alternative<ShapeMapOptions<true, domain::ObjectLabel::B>>(
+              shape_map_options.value()));
 
-      for (size_t i = 0; i < shape_funcs.size(); i++) {
-        CHECK(gsl::at(shape_funcs, i)[0] == 0.0);
-      }
+      const FunctionsOfTimeMap shape_and_size = get_shape_and_size(
+          shape_map_options.value(), 0.1, 0.8, 0.9, inner_radius);
+
       CHECK_ITERABLE_APPROX(
-          size_funcs,
+          shape_and_size.at(size_name)->func_and_2_derivs(0.1),
           (std::array{
               DataVector{(inner_radius - ylm::Spherepack::average(
                                              strahlkorpers[0].coefficients())) *
@@ -386,7 +291,35 @@ void test_funcs(const gsl::not_null<Generator*> generator) {
               DataVector{(inner_radius - ylm::Spherepack::average(
                                              strahlkorpers[1].coefficients())) *
                          2.0 * sqrt(M_PI)},
-              DataVector{0.0}, DataVector{0.0}}));
+              DataVector{0.0}}));
+    }
+
+    {
+      INFO("FromVolumeFile");
+      const auto shape_map_options = TestHelpers::test_option_tag<
+          domain::creators::time_dependent_options::ShapeMapOptions<
+              false, domain::ObjectLabel::B>>(
+          "TransitionEndsAtCube: false\n"
+          "H5Filename: TotalEclipseOfTheHeart.h5\n"
+          "SubfileName: VolumeData\n");
+
+      REQUIRE(shape_map_options.has_value());
+      REQUIRE(std::holds_alternative<
+              FromVolumeFileShapeSize<domain::ObjectLabel::B>>(
+          shape_map_options.value()));
+
+      const FunctionsOfTimeMap shape_and_size = get_shape_and_size(
+          shape_map_options.value(), 0.2, 1.1, 1.2, inner_radius);
+
+      CHECK(shape_and_size.at(shape_name)->time_bounds() ==
+            std::array{0.2, 1.1});
+      CHECK(shape_and_size.at(size_name)->time_bounds() ==
+            std::array{0.2, 1.2});
+
+      CHECK(shape_and_size.at(shape_name)->func_and_2_derivs(0.2) ==
+            functions_of_time.at(shape_name)->func_and_2_derivs(0.2));
+      CHECK(shape_and_size.at(size_name)->func_and_2_derivs(0.2) ==
+            functions_of_time.at(size_name)->func_and_2_derivs(0.2));
     }
 
     if (file_system::check_if_file_exists(test_filename)) {
@@ -394,6 +327,7 @@ void test_funcs(const gsl::not_null<Generator*> generator) {
     }
   }
   {
+    INFO("YlmsFromSpec");
     const std::string test_filename{"PartialEclipseOfTheHeart.dat"};
     if (file_system::check_if_file_exists(test_filename)) {
       file_system::rm(test_filename, true);
@@ -454,7 +388,7 @@ void test_funcs(const gsl::not_null<Generator*> generator) {
     }
 
     {
-      const auto shape_map_options = TestHelpers::test_creation<
+      const auto shape_map_options = TestHelpers::test_option_tag<
           domain::creators::time_dependent_options::ShapeMapOptions<
               false, domain::ObjectLabel::None>>(
           "LMax: 8\n"
@@ -465,9 +399,17 @@ void test_funcs(const gsl::not_null<Generator*> generator) {
           "  SetL1CoefsToZero: True\n"
           "SizeInitialValues: Auto");
 
-      const auto [shape_funcs, size_funcs] =
-          domain::creators::time_dependent_options::
-              initial_shape_and_size_funcs(shape_map_options, inner_radius);
+      REQUIRE(shape_map_options.has_value());
+      REQUIRE(std::holds_alternative<
+              ShapeMapOptions<false, domain::ObjectLabel::None>>(
+          shape_map_options.value()));
+
+      const FunctionsOfTimeMap shape_and_size = get_shape_and_size(
+          shape_map_options.value(), 0.2, 1.1, 1.2, inner_radius);
+
+      const auto shape_funcs =
+          shape_and_size.at("Shape")->func_and_2_derivs(0.2);
+      const auto size_funcs = shape_and_size.at("Size")->func_and_2_derivs(0.2);
 
       ylm::SpherepackIterator iter{l_max, l_max};
       ylm::SpherepackIterator file_iter{file_l_max, file_l_max};
@@ -498,11 +440,11 @@ void test_funcs(const gsl::not_null<Generator*> generator) {
       CHECK(size_funcs ==
             std::array{DataVector{-1.0 * strahlkorper.coefficients()[0] *
                                   sqrt(0.5 * M_PI)},
-                       DataVector{0.0}, DataVector{0.0}, DataVector{0.0}});
+                       DataVector{0.0}, DataVector{0.0}});
     }
 
     {
-      const auto shape_map_options = TestHelpers::test_creation<
+      const auto shape_map_options = TestHelpers::test_option_tag<
           domain::creators::time_dependent_options::ShapeMapOptions<
               false, domain::ObjectLabel::None>>(
           "LMax: 8\n"
@@ -513,8 +455,8 @@ void test_funcs(const gsl::not_null<Generator*> generator) {
           "  SetL1CoefsToZero: True\n"
           "SizeInitialValues: Auto");
       CHECK_THROWS_WITH(
-          (domain::creators::time_dependent_options::
-               initial_shape_and_size_funcs(shape_map_options, inner_radius)),
+          (get_shape_and_size(shape_map_options.value(), 0.2, 1.1, 1.2,
+                              inner_radius)),
           Catch::Matchers::ContainsSubstring(
               "Unable to find requested time 1") and
               Catch::Matchers::ContainsSubstring(
@@ -534,6 +476,6 @@ SPECTRE_TEST_CASE("Unit.Domain.Creators.TimeDependentOptions.ShapeMap",
   MAKE_GENERATOR(generator);
   test_kerr_schild_boyer_lindquist();
   test_ylms_from_file();
-  test_shape_map_options();
   test_funcs(make_not_null(&generator));
 }
+}  // namespace domain::creators::time_dependent_options

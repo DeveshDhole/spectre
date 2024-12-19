@@ -12,6 +12,7 @@
 
 #include "DataStructures/DataVector.hpp"
 #include "Domain/Creators/TimeDependentOptions/FromVolumeFile.hpp"
+#include "Domain/FunctionsOfTime/FunctionOfTime.hpp"
 #include "Domain/Structure/ObjectLabel.hpp"
 #include "NumericalAlgorithms/SphericalHarmonics/IO/ReadSurfaceYlm.hpp"
 #include "NumericalAlgorithms/SphericalHarmonics/Strahlkorper.hpp"
@@ -122,10 +123,10 @@ struct YlmsFromFile {
                std::optional<double> match_time_epsilon_in,
                bool set_l1_coefs_to_zero_in, bool check_frame_in = true);
 
-  std::string h5_filename{};
-  std::vector<std::string> subfile_names{};
+  std::string h5_filename;
+  std::vector<std::string> subfile_names;
   double match_time{};
-  std::optional<double> match_time_epsilon{};
+  std::optional<double> match_time_epsilon;
   bool set_l1_coefs_to_zero{};
   bool check_frame{true};
 };
@@ -172,14 +173,50 @@ struct YlmsFromSpEC {
                std::optional<double> match_time_epsilon_in,
                bool set_l1_coefs_to_zero_in);
 
-  std::string dat_filename{};
+  std::string dat_filename;
   double match_time{};
-  std::optional<double> match_time_epsilon{};
+  std::optional<double> match_time_epsilon;
   bool set_l1_coefs_to_zero{};
+};
+
+namespace detail {
+struct TransitionEndsAtCube {
+  using type = bool;
+  static constexpr Options::String help = {
+      "If 'true', the shape map transition function will be 0 at the cubical "
+      "boundary around the object. If 'false' the transition function will "
+      "be 0 at the outer radius of the inner sphere around the object"};
+};
+}  // namespace detail
+
+/*!
+ * \brief Specialized version of `FromVolumeFile` for the shape map
+ *
+ * \details This is needed because the regular `FromVolumeFile` doesn't have
+ * options for domain settings like `TransitionEndsAtCube`.
+ */
+template <ObjectLabel Object>
+struct FromVolumeFileShapeSize : public FromVolumeFile {
+  using options =
+      tmpl::push_front<FromVolumeFile::options, detail::TransitionEndsAtCube>;
+
+  FromVolumeFileShapeSize() = default;
+  FromVolumeFileShapeSize(bool transition_ends_at_cube_in,
+                          std::string h5_filename, std::string subfile_name);
+
+  size_t l_max{};
+  bool transition_ends_at_cube{};
+
+ private:
+  std::string h5_filename_;
+  std::string subfile_name_;
 };
 
 /*!
  * \brief Class to be used as an option for initializing shape map coefficients.
+ *
+ * \details This class can also be used as an option tag with the \p type type
+ * alias, `name()` function, and \p help string.
  *
  * \tparam IncludeTransitionEndsAtCube This is mainly added for the
  * `domain::creators::BinaryCompactObject` domain.
@@ -189,7 +226,10 @@ struct YlmsFromSpEC {
  */
 template <bool IncludeTransitionEndsAtCube, domain::ObjectLabel Object>
 struct ShapeMapOptions {
-  using type = Options::Auto<ShapeMapOptions, Options::AutoLabel::None>;
+  using type = Options::Auto<
+      std::variant<ShapeMapOptions<IncludeTransitionEndsAtCube, Object>,
+                   FromVolumeFileShapeSize<Object>>,
+      Options::AutoLabel::None>;
   static std::string name() { return "ShapeMap" + get_output(Object); }
   static constexpr Options::String help = {
       "Options for a time-dependent distortion (shape) map about the "
@@ -204,8 +244,7 @@ struct ShapeMapOptions {
 
   struct InitialValues {
     using type = Options::Auto<
-        std::variant<KerrSchildFromBoyerLindquist, YlmsFromFile, YlmsFromSpEC,
-                     FromVolumeFile<names::ShapeSize<Object>>>,
+        std::variant<KerrSchildFromBoyerLindquist, YlmsFromFile, YlmsFromSpEC>,
         Spherical>;
     static constexpr Options::String help = {
         "Initial Ylm coefficients for the shape map. Specify 'Spherical' for "
@@ -222,30 +261,20 @@ struct ShapeMapOptions {
         "set the radius of the sphere in the grid frame (before deformation)."};
   };
 
-  struct TransitionEndsAtCube {
-    using type = bool;
-    static constexpr Options::String help = {
-        "If 'true', the shape map transition function will be 0 at the cubical "
-        "boundary around the object. If 'false' the transition function will "
-        "be 0 at the outer radius of the inner sphere around the object"};
-  };
-
   using common_options = tmpl::list<LMax, InitialValues, SizeInitialValues>;
 
-  using options =
-      tmpl::conditional_t<IncludeTransitionEndsAtCube,
-                          tmpl::push_back<common_options, TransitionEndsAtCube>,
-                          common_options>;
+  using options = tmpl::conditional_t<
+      IncludeTransitionEndsAtCube,
+      tmpl::push_back<common_options, detail::TransitionEndsAtCube>,
+      common_options>;
   ShapeMapOptions() = default;
-  ShapeMapOptions(
-      size_t l_max_in,
-      std::optional<
-          std::variant<KerrSchildFromBoyerLindquist, YlmsFromFile, YlmsFromSpEC,
-                       FromVolumeFile<names::ShapeSize<Object>>>>
-          initial_values_in,
-      std::optional<std::array<double, 3>> initial_size_values_in =
-          std::nullopt,
-      bool transition_ends_at_cube_in = false)
+  ShapeMapOptions(size_t l_max_in,
+                  std::optional<std::variant<KerrSchildFromBoyerLindquist,
+                                             YlmsFromFile, YlmsFromSpEC>>
+                      initial_values_in,
+                  std::optional<std::array<double, 3>> initial_size_values_in =
+                      std::nullopt,
+                  bool transition_ends_at_cube_in = false)
       : l_max(l_max_in),
         initial_values(std::move(initial_values_in)),
         initial_size_values(initial_size_values_in),
@@ -253,16 +282,42 @@ struct ShapeMapOptions {
 
   size_t l_max{};
   std::optional<
-      std::variant<KerrSchildFromBoyerLindquist, YlmsFromFile, YlmsFromSpEC,
-                   FromVolumeFile<names::ShapeSize<Object>>>>
-      initial_values{};
-  std::optional<std::array<double, 3>> initial_size_values{};
+      std::variant<KerrSchildFromBoyerLindquist, YlmsFromFile, YlmsFromSpEC>>
+      initial_values;
+  std::optional<std::array<double, 3>> initial_size_values;
   bool transition_ends_at_cube{false};
 };
 
+/*!
+ * \brief Helper function to get LMax from the different variants that the shape
+ * map options could be.
+ */
 template <bool IncludeTransitionEndsAtCube, domain::ObjectLabel Object>
-std::pair<std::array<DataVector, 3>, std::array<DataVector, 4>>
-initial_shape_and_size_funcs(
-    const ShapeMapOptions<IncludeTransitionEndsAtCube, Object>& shape_options,
-    double deformed_radius);
+size_t l_max_from_shape_options(
+    const std::variant<ShapeMapOptions<IncludeTransitionEndsAtCube, Object>,
+                       FromVolumeFileShapeSize<Object>>& shape_map_options);
+
+/*!
+ * \brief Helper function to get whether the shape map transition function ends
+ * at the cube from the different variants that the shape map options could be.
+ */
+template <bool IncludeTransitionEndsAtCube, domain::ObjectLabel Object>
+bool transition_ends_at_cube_from_shape_options(
+    const std::variant<ShapeMapOptions<IncludeTransitionEndsAtCube, Object>,
+                       FromVolumeFileShapeSize<Object>>& shape_map_options);
+
+/*!
+ * \brief Helper function that takes the variant of the shape map options, and
+ * returns the fully constructed shape and size functions of time.
+ *
+ * \details Even if the functions of time are read from a file, they will have a
+ * new \p initial_time, \p shape_expiration_time, and \p size_expiration_time.
+ * The \p deformed_radius is only used for the non-volume file variants.
+ */
+template <bool IncludeTransitionEndsAtCube, domain::ObjectLabel Object>
+FunctionsOfTimeMap get_shape_and_size(
+    const std::variant<ShapeMapOptions<IncludeTransitionEndsAtCube, Object>,
+                       FromVolumeFileShapeSize<Object>>& shape_map_options,
+    double initial_time, double shape_expiration_time,
+    double size_expiration_time, double deformed_radius);
 }  // namespace domain::creators::time_dependent_options

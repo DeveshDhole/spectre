@@ -8,6 +8,7 @@
 #include <fstream>
 #include <istream>
 #include <limits>
+#include <memory>
 #include <sstream>
 #include <string>
 #include <utility>
@@ -16,6 +17,8 @@
 #include "DataStructures/DataVector.hpp"
 #include "DataStructures/ModalVector.hpp"
 #include "DataStructures/Tensor/Tensor.hpp"
+#include "Domain/FunctionsOfTime/FunctionOfTime.hpp"
+#include "Domain/FunctionsOfTime/PiecewisePolynomial.hpp"
 #include "Domain/Structure/ObjectLabel.hpp"
 #include "FromVolumeFile.hpp"
 #include "NumericalAlgorithms/SphericalHarmonics/Spherepack.hpp"
@@ -55,26 +58,109 @@ YlmsFromSpEC::YlmsFromSpEC(std::string dat_filename_in,
       match_time_epsilon(match_time_epsilon_in),
       set_l1_coefs_to_zero(set_l1_coefs_to_zero_in) {}
 
+template <ObjectLabel Object>
+FromVolumeFileShapeSize<Object>::FromVolumeFileShapeSize(
+    const bool transition_ends_at_cube_in, std::string h5_filename,
+    std::string subfile_name)
+    : FromVolumeFile(std::move(h5_filename), std::move(subfile_name)),
+      transition_ends_at_cube(transition_ends_at_cube_in) {
+  const auto shape_fot_map =
+      retrieve_function_of_time({"Shape" + name(Object)}, std::nullopt);
+  const auto& shape_fot = shape_fot_map.at("Shape" + name(Object));
+
+  const double initial_time = shape_fot->time_bounds()[0];
+  const auto function = shape_fot->func(initial_time);
+
+  // num_components = 2 * (l_max + 1)**2 if l_max == m_max which it is for the
+  // shape map. This is why we can divide by 2 and take the sqrt without
+  // worrying about odd numbers or non-perfect squares
+  l_max = -1 + sqrt(function[0].size() / 2);
+}
+
 template <bool IncludeTransitionEndsAtCube, domain::ObjectLabel Object>
-std::pair<std::array<DataVector, 3>, std::array<DataVector, 4>>
-initial_shape_and_size_funcs(
-    const ShapeMapOptions<IncludeTransitionEndsAtCube, Object>& shape_options,
-    const double deformed_radius) {
-  const DataVector shape_zeros{
-      ylm::Spherepack::spectral_size(shape_options.l_max, shape_options.l_max),
-      0.0};
+size_t l_max_from_shape_options(
+    const std::variant<ShapeMapOptions<IncludeTransitionEndsAtCube, Object>,
+                       FromVolumeFileShapeSize<Object>>& shape_map_options) {
+  return std::visit([](auto variant) { return variant.l_max; },
+                    shape_map_options);
+}
+
+template <bool IncludeTransitionEndsAtCube, domain::ObjectLabel Object>
+bool transition_ends_at_cube_from_shape_options(
+    const std::variant<ShapeMapOptions<IncludeTransitionEndsAtCube, Object>,
+                       FromVolumeFileShapeSize<Object>>& shape_map_options) {
+  return std::visit(
+      [](auto variant) { return variant.transition_ends_at_cube; },
+      shape_map_options);
+}
+
+template <bool IncludeTransitionEndsAtCube, domain::ObjectLabel Object>
+FunctionsOfTimeMap get_shape_and_size(
+    const std::variant<ShapeMapOptions<IncludeTransitionEndsAtCube, Object>,
+                       FromVolumeFileShapeSize<Object>>& shape_map_options,
+    const double initial_time, const double shape_expiration_time,
+    const double size_expiration_time, const double deformed_radius) {
+  const size_t l_max = l_max_from_shape_options(shape_map_options);
+  const DataVector shape_zeros{ylm::Spherepack::spectral_size(l_max, l_max),
+                               0.0};
+  const std::string shape_name = "Shape" + name(Object);
+  const std::string size_name = "Size" + name(Object);
+
+  FunctionsOfTimeMap result{};
+
+  if (std::holds_alternative<FromVolumeFileShapeSize<Object>>(
+          shape_map_options)) {
+    const auto& from_vol_file =
+        std::get<FromVolumeFileShapeSize<Object>>(shape_map_options);
+    const auto volume_fots = from_vol_file.retrieve_function_of_time(
+        {shape_name, size_name}, initial_time);
+
+    const auto check_fot = [&]<size_t MaxDeriv>(const std::string& name) {
+      // It must be a PiecewisePolynomial
+      if (UNLIKELY(dynamic_cast<
+                       domain::FunctionsOfTime::PiecewisePolynomial<MaxDeriv>*>(
+                       volume_fots.at(name).get()) == nullptr)) {
+        ERROR_NO_TRACE(name << " function of time read from volume data is not "
+                               "a PiecewisePolynomial<"
+                            << MaxDeriv << ">. Cannot use it to initialize the "
+                            << name << " map.");
+      }
+    };
+
+    check_fot.template operator()<2>(shape_name);
+    check_fot.template operator()<3>(size_name);
+
+    result[shape_name] =
+        volume_fots.at(shape_name)
+            ->create_at_time(initial_time, shape_expiration_time);
+    result[size_name] = volume_fots.at(size_name)->create_at_time(
+        initial_time, size_expiration_time);
+
+    return result;
+  }
+
+  if (not std::holds_alternative<
+          ShapeMapOptions<IncludeTransitionEndsAtCube, Object>>(
+          shape_map_options)) {
+    ERROR("Unknown ShapeMap.");
+  }
+
+  const auto& hard_coded_options =
+      std::get<ShapeMapOptions<IncludeTransitionEndsAtCube, Object>>(
+          shape_map_options);
 
   std::array<DataVector, 3> shape_funcs =
       make_array<3, DataVector>(shape_zeros);
   std::array<DataVector, 4> size_funcs =
       make_array<4, DataVector>(DataVector{1, 0.0});
 
-  if (shape_options.initial_values.has_value()) {
+  if (hard_coded_options.initial_values.has_value()) {
     if (std::holds_alternative<KerrSchildFromBoyerLindquist>(
-            shape_options.initial_values.value())) {
-      const ylm::Spherepack ylm{shape_options.l_max, shape_options.l_max};
+            hard_coded_options.initial_values.value())) {
+      const ylm::Spherepack ylm{hard_coded_options.l_max,
+                                hard_coded_options.l_max};
       const auto& mass_and_spin = std::get<KerrSchildFromBoyerLindquist>(
-          shape_options.initial_values.value());
+          hard_coded_options.initial_values.value());
       const DataVector radial_distortion =
           deformed_radius -
           get(gr::Solutions::kerr_schild_radius_from_boyer_lindquist(
@@ -86,16 +172,15 @@ initial_shape_and_size_funcs(
       // Set l=0 for shape map to 0 because size control will adjust l=0
       shape_funcs[0][0] = 0.0;
     } else if (std::holds_alternative<YlmsFromFile>(
-                   shape_options.initial_values.value())) {
+                   hard_coded_options.initial_values.value())) {
       const auto& files =
-          std::get<YlmsFromFile>(shape_options.initial_values.value());
+          std::get<YlmsFromFile>(hard_coded_options.initial_values.value());
       const std::string& h5_filename = files.h5_filename;
       const std::vector<std::string>& subfile_names = files.subfile_names;
       const double match_time = files.match_time;
       const double match_time_epsilon =
           files.match_time_epsilon.value_or(1e-12);
       const bool set_l1_coefs_to_zero = files.set_l1_coefs_to_zero;
-      const size_t l_max = shape_options.l_max;
       ylm::SpherepackIterator iter{l_max, l_max};
 
       for (size_t i = 0; i < subfile_names.size(); i++) {
@@ -105,7 +190,7 @@ initial_shape_and_size_funcs(
                 h5_filename, gsl::at(subfile_names, i), match_time,
                 match_time_epsilon, files.check_frame);
         const ylm::Strahlkorper<Frame::Distorted> this_strahlkorper{
-            shape_options.l_max, 1.0, std::array{0.0, 0.0, 0.0}};
+            hard_coded_options.l_max, 1.0, std::array{0.0, 0.0, 0.0}};
 
         // The coefficients in the shape map are stored as the negative
         // coefficients of the strahlkorper, so we need to multiply by -1 here.
@@ -129,9 +214,9 @@ initial_shape_and_size_funcs(
         }
       }
     } else if (std::holds_alternative<YlmsFromSpEC>(
-                   shape_options.initial_values.value())) {
+                   hard_coded_options.initial_values.value())) {
       const auto& spec_option =
-          std::get<YlmsFromSpEC>(shape_options.initial_values.value());
+          std::get<YlmsFromSpEC>(hard_coded_options.initial_values.value());
       const std::string& dat_filename = spec_option.dat_filename;
       const double match_time = spec_option.match_time;
       const double match_time_epsilon =
@@ -144,7 +229,7 @@ initial_shape_and_size_funcs(
       }
       std::string line{};
       size_t total_col = 0;
-      std::optional<size_t> l_max{};
+      std::optional<size_t> file_l_max{};
       std::array<double, 3> center{};
       ModalVector coefficients{};
       // This will be actually set below
@@ -173,7 +258,7 @@ initial_shape_and_size_funcs(
           continue;
         }
 
-        if (l_max.has_value()) {
+        if (file_l_max.has_value()) {
           ERROR("Found more than one time in the SpEC dat file "
                 << dat_filename << " that is within a relative epsilon of "
                 << match_time_epsilon << " of the time requested " << time);
@@ -181,42 +266,43 @@ initial_shape_and_size_funcs(
 
         // Casting to an integer floors a double, so we add 0.5 before we take
         // the sqrt to avoid any rounding issues
-        const auto l_max_plus_one =
+        const auto file_l_max_plus_one =
             static_cast<size_t>(sqrt(static_cast<double>(total_col) + 0.5));
-        if (l_max_plus_one == 0) {
+        if (file_l_max_plus_one == 0) {
           ERROR(
               "Invalid l_max from SpEC dat file. l_max + 1 was computed to be "
               "0");
         }
-        l_max = l_max_plus_one - 1;
+        file_l_max = file_l_max_plus_one - 1;
 
         ss >> center[0];
         ss >> center[1];
         ss >> center[2];
 
-        coefficients.destructive_resize(
-            ylm::Spherepack::spectral_size(l_max.value(), l_max.value()));
+        coefficients.destructive_resize(ylm::Spherepack::spectral_size(
+            file_l_max.value(), file_l_max.value()));
 
-        file_iter = ylm::SpherepackIterator{l_max.value(), l_max.value()};
+        file_iter =
+            ylm::SpherepackIterator{file_l_max.value(), file_l_max.value()};
 
-        for (int l = 0; l <= static_cast<int>(l_max.value()); l++) {
+        for (int l = 0; l <= static_cast<int>(file_l_max.value()); l++) {
           for (int m = -l; m <= l; m++) {
             ss >> coefficients[file_iter.set(static_cast<size_t>(l), m)()];
           }
         }
       }
 
-      if (not l_max.has_value()) {
+      if (not file_l_max.has_value()) {
         ERROR_NO_TRACE("Unable to find requested time "
                        << time << " within an epsilon of " << match_time_epsilon
                        << " in SpEC dat file " << dat_filename);
       }
 
       const ylm::Strahlkorper<Frame::Inertial> file_strahlkorper{
-          l_max.value(), l_max.value(), coefficients, center};
+          file_l_max.value(), file_l_max.value(), coefficients, center};
       const ylm::Strahlkorper<Frame::Inertial> this_strahlkorper{
-          shape_options.l_max, 1.0, std::array{0.0, 0.0, 0.0}};
-      ylm::SpherepackIterator iter{shape_options.l_max, shape_options.l_max};
+          l_max, 1.0, std::array{0.0, 0.0, 0.0}};
+      ylm::SpherepackIterator iter{l_max, l_max};
 
       shape_funcs[0] =
           -1.0 * file_strahlkorper.ylm_spherepack().prolong_or_restrict(
@@ -231,46 +317,61 @@ initial_shape_and_size_funcs(
           shape_funcs[0][iter.set(1_st, m)()] = 0.0;
         }
       }
-    } else if (std::holds_alternative<FromVolumeFile<names::ShapeSize<Object>>>(
-                   shape_options.initial_values.value())) {
-      const auto& volume_file_options =
-          std::get<FromVolumeFile<names::ShapeSize<Object>>>(
-              shape_options.initial_values.value());
-
-      shape_funcs = volume_file_options.shape_values;
-      size_funcs = volume_file_options.size_values;
     }
   }
 
   // If any size options were specified, those override the values from the
   // shape coefs
-  if (shape_options.initial_size_values.has_value()) {
+  if (hard_coded_options.initial_size_values.has_value()) {
     for (size_t i = 0; i < 3; i++) {
       gsl::at(size_funcs, i)[0] =
-          gsl::at(shape_options.initial_size_values.value(), i);
+          gsl::at(hard_coded_options.initial_size_values.value(), i);
     }
   }
 
-  return std::make_pair(std::move(shape_funcs), std::move(size_funcs));
+  result[shape_name] =
+      std::make_unique<FunctionsOfTime::PiecewisePolynomial<2>>(
+          initial_time, std::move(shape_funcs), shape_expiration_time);
+  result[size_name] = std::make_unique<FunctionsOfTime::PiecewisePolynomial<3>>(
+      initial_time, std::move(size_funcs), size_expiration_time);
+
+  return result;
 }
 
-#define INCLUDETRANSITION(data) BOOST_PP_TUPLE_ELEM(0, data)
-#define OBJECT(data) BOOST_PP_TUPLE_ELEM(1, data)
+#define OBJECT(data) BOOST_PP_TUPLE_ELEM(0, data)
+#define INCLUDETRANSITION(data) BOOST_PP_TUPLE_ELEM(1, data)
 
-#define INSTANTIATE(_, data)                                               \
-  template class ShapeMapOptions<INCLUDETRANSITION(data), OBJECT(data)>;   \
-  template std::pair<std::array<DataVector, 3>, std::array<DataVector, 4>> \
-  initial_shape_and_size_funcs<INCLUDETRANSITION(data), OBJECT(data)>(     \
-      const ShapeMapOptions<INCLUDETRANSITION(data), OBJECT(data)>&        \
-          shape_options,                                                   \
-      double deformed_radius);
+#define INSTANTIATE(_, data)                                          \
+  template size_t l_max_from_shape_options(                           \
+      const std::variant<                                             \
+          ShapeMapOptions<INCLUDETRANSITION(data), OBJECT(data)>,     \
+          FromVolumeFileShapeSize<OBJECT(data)>>& shape_map_options); \
+  template bool transition_ends_at_cube_from_shape_options(           \
+      const std::variant<                                             \
+          ShapeMapOptions<INCLUDETRANSITION(data), OBJECT(data)>,     \
+          FromVolumeFileShapeSize<OBJECT(data)>>& shape_map_options); \
+  template FunctionsOfTimeMap get_shape_and_size(                     \
+      const std::variant<                                             \
+          ShapeMapOptions<INCLUDETRANSITION(data), OBJECT(data)>,     \
+          FromVolumeFileShapeSize<OBJECT(data)>>& shape_map_options,  \
+      double initial_time, double shape_expiration_time,              \
+      double size_expiration_time, double deformed_radius);
 
-GENERATE_INSTANTIATIONS(INSTANTIATE, (true, false),
+GENERATE_INSTANTIATIONS(INSTANTIATE,
+                        (domain::ObjectLabel::A, domain::ObjectLabel::B,
+                         domain::ObjectLabel::None),
+                        (true, false))
+
+#undef INCLUDETRANSITION
+#undef INSTANTIATE
+
+#define INSTANTIATE(_, data) \
+  template class FromVolumeFileShapeSize<OBJECT(data)>;
+
+GENERATE_INSTANTIATIONS(INSTANTIATE,
                         (domain::ObjectLabel::A, domain::ObjectLabel::B,
                          domain::ObjectLabel::None))
 
-#undef INCLUDETRANSITION
 #undef OBJECT
 #undef INSTANTIATE
-
 }  // namespace domain::creators::time_dependent_options

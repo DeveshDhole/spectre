@@ -5,104 +5,113 @@
 
 #include <array>
 #include <cstddef>
+#include <memory>
 #include <optional>
 #include <string>
 #include <variant>
 
 #include "DataStructures/DataVector.hpp"
 #include "Domain/Creators/TimeDependentOptions/FromVolumeFile.hpp"
+#include "Domain/FunctionsOfTime/FunctionOfTime.hpp"
 #include "Options/Auto.hpp"
 #include "Options/Context.hpp"
+#include "Options/Options.hpp"
 #include "Options/String.hpp"
 #include "Utilities/TMPL.hpp"
 
 namespace domain::creators::time_dependent_options {
 /*!
- * \brief Class to be used as an option for initializing expansion map
- * coefficients.
+ * \brief Class that holds hard coded expansion map options from the input file.
+ *
+ * \details This class can also be used as an option tag with the \p type type
+ * alias, `name()` function, and \p help string.
  */
+template <bool AllowSettleFoTs>
 struct ExpansionMapOptions {
-  using type = Options::Auto<ExpansionMapOptions, Options::AutoLabel::None>;
+  using type = Options::Auto<
+      std::variant<ExpansionMapOptions<AllowSettleFoTs>, FromVolumeFile>,
+      Options::AutoLabel::None>;
   static std::string name() { return "ExpansionMap"; }
   static constexpr Options::String help = {
       "Options for a time-dependent expansion of the coordinates. Specify "
       "'None' to not use this map."};
 
   struct InitialValues {
-    using type =
-        std::variant<std::array<double, 3>, FromVolumeFile<names::Expansion>>;
-    static constexpr Options::String help = {
-        "Initial values for the expansion map, its velocity and "
-        "acceleration."};
+    using type = std::array<double, 3>;
+    static constexpr Options::String help =
+        "Initial values for the expansion map, its velocity and acceleration.";
   };
 
   struct InitialValuesOuterBoundary {
-    using type =
-        std::variant<std::array<double, 3>, FromVolumeFile<names::Expansion>>;
+    using type = std::array<double, 3>;
     static constexpr Options::String help = {
-        "Initial values for the expansion map, its velocity and "
-        "acceleration at the outer boundary. Unless you are starting from a "
-        "checkpoint or continuing an evolution, this option should likely be "
-        "[1.0, 0.0, 0.0] at the start of an evolution"};
+        "Initial values for the expansion map, its velocity and acceleration "
+        "at the outer boundary."};
   };
 
   struct DecayTimescaleOuterBoundary {
-    using type = Options::Auto<double>;
+    using type = double;
     static constexpr Options::String help = {
         "A timescale for how fast the outer boundary expansion approaches its "
-        "asymptotic value. Can optionally specify 'Auto' when reading the "
-        "initial values 'FromVolumeFile' to use the decay timescale from the "
-        "function of time in the volume file. Cannot specify 'Auto' when "
-        "initial values are specified directly."};
+        "asymptotic value."};
   };
 
   struct DecayTimescale {
-    using type = Options::Auto<double>;
+    using type = double;
     static constexpr Options::String help = {
-        "If specified, a SettleToConstant function of time will be used for "
-        "the expansion map and this number will determine the timescale that "
-        "the expansion approaches its asymptotic value. If 'Auto' is "
-        "specified, a PiecewisePolynomial function of time will be used for "
-        "the expansion map. Note that if you are reading the initial values "
-        "from a volume file, you must specify 'Auto' for this option."};
+        "A timescale for how fast the expansion approaches its asymptotic "
+        "value with a SettleToConstant function of time."};
   };
 
   struct AsymptoticVelocityOuterBoundary {
-    using type = Options::Auto<double>;
+    using type = double;
     static constexpr Options::String help = {
-        "There are two choices for this option. If a value is specified, a "
-        "FixedSpeedCubic function of time will be used for the expansion map "
-        "at the outer boundary and this number will determine its velocity. If "
-        "'Auto' is specified, the behavior will depend on what is chosen for "
-        "'InitialValuesOuterBoundary'. If values are specified for "
-        "'InitialValuesOuterBoundary', then 'Auto' here means a "
-        "SettleToConstant function of time will be used for the expansion map "
-        "at the outer boundary. If 'FromVolumeFile' is specified for "
-        "'InitialValuesOuterBoundary', then a FixedSpeedCubic function of time "
-        "will be used and the velocity from the function of "
-        "time in the volume file will be used."};
+        "The constant velocity of the outer boundary expansion."};
   };
 
-  using options = tmpl::list<InitialValues, InitialValuesOuterBoundary,
-                             DecayTimescaleOuterBoundary, DecayTimescale,
-                             AsymptoticVelocityOuterBoundary>;
+  using common_options = tmpl::list<InitialValues, DecayTimescaleOuterBoundary>;
+  using settle_options =
+      tmpl::push_back<common_options, InitialValuesOuterBoundary,
+                      DecayTimescale>;
+  using non_settle_options =
+      tmpl::push_back<common_options, AsymptoticVelocityOuterBoundary>;
+
+  using options = tmpl::conditional_t<
+      AllowSettleFoTs,
+      tmpl::list<Options::Alternatives<settle_options, non_settle_options>>,
+      non_settle_options>;
 
   ExpansionMapOptions() = default;
+  // Constructor for SettleToConstant functions of time
   ExpansionMapOptions(
-      const std::variant<std::array<double, 3>,
-                         FromVolumeFile<names::Expansion>>& expansion_values,
-      const std::variant<std::array<double, 3>,
-                         FromVolumeFile<names::Expansion>>&
-          expansion_outer_boundary_values,
-      std::optional<double> decay_timescale_outer_boundary_in,
-      std::optional<double> decay_timescale_in,
-      std::optional<double> asymptotic_velocity_outer_boundary_in,
-      const Options::Context& context = {});
+      const std::array<double, 3>& initial_values_in,
+      double decay_timescale_outer_boundary_in,
+      const std::array<double, 3>& initial_values_outer_boundary_in,
+      double decay_timescale_in, const Options::Context& context = {});
+  // Constructor for non SettleToConstant functions of time
+  ExpansionMapOptions(const std::array<double, 3>& initial_values_in,
+                      double decay_timescale_outer_boundary_in,
+                      double asymptotic_velocity_outer_boundary_in,
+                      const Options::Context& context = {});
 
   std::array<DataVector, 3> initial_values{};
   std::array<DataVector, 3> initial_values_outer_boundary{};
   double decay_timescale_outer_boundary{};
-  std::optional<double> decay_timescale{};
-  std::optional<double> asymptotic_velocity_outer_boundary{};
+  std::optional<double> decay_timescale;
+  std::optional<double> asymptotic_velocity_outer_boundary;
 };
+
+/*!
+ * \brief Helper functions that take the variant of the expansion map options,
+ * and return the fully constructed expansion functions of time.
+ *
+ * \details Even if the functions of time are read from a file, they will have a
+ * new \p initial_time and \p expiration_time (no expiration time for the outer
+ * boundary function of time though).
+ */
+template <bool AllowSettleFoTs>
+FunctionsOfTimeMap get_expansion(
+    const std::variant<ExpansionMapOptions<AllowSettleFoTs>, FromVolumeFile>&
+        expansion_map_options,
+    double initial_time, double expiration_time);
 }  // namespace domain::creators::time_dependent_options
