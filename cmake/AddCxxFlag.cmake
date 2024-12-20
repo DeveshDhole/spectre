@@ -1,6 +1,12 @@
 # Distributed under the MIT License.
 # See LICENSE.txt for details.
 
+# Have to compile a file (can be empty) to check for flags.
+# Kokkos' nvcc_wrapper doesn't support taking the file as stdin, so we
+# have to write it to a file.
+set(_CHECK_CXX_FLAGS_SOURCE "${CMAKE_BINARY_DIR}/CMakeFiles/CheckCxxFlags.cpp")
+write_file(${_CHECK_CXX_FLAGS_SOURCE} "")
+
 # Checks if a flag is supported by the compiler and creates the target
 # TARGET_NAME whose INTERFACE_COMPILE_OPTIONS are set to the FLAG_TO_CHECK
 # - LANGUAGE: language to check, setting the compiler and generated property
@@ -16,7 +22,8 @@ function(create_compile_flag_target LANGUAGE XTYPE FLAG_TO_CHECK TARGET_NAME)
     COMMAND
     bash -c
     "LC_ALL=POSIX ${CMAKE_${LANGUAGE}_COMPILER} -Werror \
-${POSITIVE_FLAG_TO_CHECK} -x ${XTYPE} -c - <<< \"\" -o /dev/null"
+${POSITIVE_FLAG_TO_CHECK} -x ${XTYPE} \
+-c ${_CHECK_CXX_FLAGS_SOURCE} -o /dev/null"
     RESULT_VARIABLE RESULT
     ERROR_VARIABLE ERROR_FROM_COMPILATION
     OUTPUT_QUIET)
@@ -69,7 +76,8 @@ function(create_compile_flags_target LANGUAGE XTYPE FLAGS_TO_CHECK TARGET_NAME)
     COMMAND
     bash -c
     "LC_ALL=POSIX ${CMAKE_${LANGUAGE}_COMPILER} -Werror \
-${POSITIVE_FLAGS_WITH_SPACES} -x ${XTYPE} -c - <<< \"\" -o /dev/null"
+${POSITIVE_FLAGS_WITH_SPACES} -x ${XTYPE} \
+-c ${_CHECK_CXX_FLAGS_SOURCE} -o /dev/null"
     RESULT_VARIABLE RESULT
     ERROR_VARIABLE ERROR_FROM_COMPILATION
     OUTPUT_QUIET)
