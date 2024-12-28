@@ -241,7 +241,7 @@ struct DgOperatorImpl<System, Linearized, tmpl::list<PrimalFields...>,
             typename... PrimalFluxesVars, typename... PrimalMortarVars,
             typename... PrimalMortarFluxes, typename TemporalId,
             typename ApplyBoundaryCondition, typename... FluxesArgs,
-            typename... SourcesArgs, typename DataIsZero = NoDataIsZero,
+            typename DataIsZero = NoDataIsZero,
             typename DirectionsPredicate = AllDirections>
   static void prepare_mortar_data(
       const gsl::not_null<Variables<tmpl::list<DerivTags...>>*> deriv_vars,
