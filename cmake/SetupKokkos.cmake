@@ -23,6 +23,11 @@ if(SPECTRE_KOKKOS)
     find_package(CUDAToolkit REQUIRED)
     set(Kokkos_ENABLE_CUDA_LAMBDA ON CACHE BOOL
       "Enable lambda expressions in CUDA")
+    # Allow constexpr functions to be called from device code
+    # without the need for a device annotation.
+    # See https://docs.nvidia.com/cuda/cuda-c-programming-guide/index.html#constexpr-functions-and-function-templates
+    set(Kokkos_ENABLE_CUDA_CONSTEXPR ON CACHE BOOL
+      "Enable constexpr in CUDA")
   endif()
 
   find_package(Kokkos)
