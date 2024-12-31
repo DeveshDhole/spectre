@@ -94,6 +94,20 @@ class StaticCache {
       static_assert(
           tt::is_integer_v<std::remove_cv_t<T1>>,
           "The parameter passed for a CacheRange must be an integer type.");
+
+      // Check range here because the nested range checks in the unwrap_cache
+      // function cause significant compile time overhead.
+      if (UNLIKELY(Range::start >
+                       static_cast<decltype(Range::start)>(parameter) or
+                   static_cast<decltype(Range::start)>(parameter) >=
+                       Range::start +
+                           static_cast<decltype(Range::start)>(Range::size))) {
+        ERROR("Index out of range: "
+              << Range::start << " <= " << parameter << " < "
+              << Range::start +
+                     static_cast<decltype(Range::start)>(Range::size));
+      }
+
       return std::make_tuple(
           static_cast<typename Range::value_type>(parameter),
           std::integral_constant<typename Range::value_type, Range::start>{},
@@ -118,14 +132,6 @@ class StaticCache {
           std::integer_sequence<std::remove_cv_t<decltype(IndexOffset)>, Is...>>
           parameter0,
       Args... parameters) const {
-    if (UNLIKELY(IndexOffset > std::get<0>(parameter0) or
-                 std::get<0>(parameter0) >=
-                     IndexOffset +
-                         static_cast<decltype(IndexOffset)>(sizeof...(Is)))) {
-      ERROR("Index out of range: "
-            << IndexOffset << " <= " << std::get<0>(parameter0) << " < "
-            << IndexOffset + static_cast<decltype(IndexOffset)>(sizeof...(Is)));
-    }
     // note that the act of assigning to the specified function pointer type
     // fixes the template arguments that need to be inferred.
     static const std::array<
