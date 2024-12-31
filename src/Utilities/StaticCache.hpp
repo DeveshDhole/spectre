@@ -10,6 +10,7 @@
 #include "Utilities/ErrorHandling/Assert.hpp"
 #include "Utilities/Gsl.hpp"
 #include "Utilities/Requires.hpp"
+#include "Utilities/TMPL.hpp"
 #include "Utilities/TypeTraits/IsInteger.hpp"
 
 /// \ingroup UtilitiesGroup
@@ -35,6 +36,7 @@ struct CacheEnumeration {
   constexpr static size_t size = sizeof...(Enums);
   using value_type = EnumerationType;
   static constexpr std::array<value_type, size> values{Enums...};
+  using value_list = tmpl::integral_list<EnumerationType, Enums...>;
 };
 
 /// \ingroup UtilitiesGroup
@@ -102,7 +104,7 @@ class StaticCache {
       if (UNLIKELY(array_location == std::numeric_limits<size_t>::max())) {
         ERROR("Uncached enumeration value: " << parameter);
       }
-      return std::tuple<size_t, Range>{array_location, Range{}};
+      return std::tuple{array_location, typename Range::value_list{}};
     } else {
       static_assert(
           tt::is_integer_v<std::remove_cv_t<T1>>,
@@ -120,12 +122,14 @@ class StaticCache {
               << Range::start +
                      static_cast<decltype(Range::start)>(Range::size));
       }
-
-      return std::make_tuple(
-          static_cast<typename Range::value_type>(parameter),
-          std::integral_constant<typename Range::value_type, Range::start>{},
-          std::make_integer_sequence<typename Range::value_type,
-                                     Range::size>{});
+      return std::tuple{
+          // unsigned cast is safe since this is an index into an array
+          static_cast<size_t>(
+              static_cast<typename Range::value_type>(parameter) -
+              Range::start),
+          tmpl::make_sequence<
+              tmpl::integral_constant<typename Range::value_type, Range::start>,
+              Range::size>{}};
     }
   }
 
@@ -135,52 +139,18 @@ class StaticCache {
     return cached_object;
   }
 
-  template <typename... IntegralConstantValues, auto IndexOffset, auto... Is,
+  template <typename... IntegralConstantValues, typename... IntegralConstants,
             typename... Args>
   const T& unwrap_cache(
-      std::tuple<
-          std::remove_cv_t<decltype(IndexOffset)>,
-          std::integral_constant<std::remove_cv_t<decltype(IndexOffset)>,
-                                 IndexOffset>,
-          std::integer_sequence<std::remove_cv_t<decltype(IndexOffset)>, Is...>>
-          parameter0,
+      std::tuple<size_t, tmpl::list<IntegralConstants...>> parameter0,
       Args... parameters) const {
     // note that the act of assigning to the specified function pointer type
     // fixes the template arguments that need to be inferred.
     static const std::array<
         const T& (StaticCache<Generator, T, Ranges...>::*)(Args...) const,
-        sizeof...(Is)>
+        sizeof...(IntegralConstants)>
         cache{{&StaticCache<Generator, T, Ranges...>::unwrap_cache<
-            IntegralConstantValues...,
-            std::integral_constant<decltype(IndexOffset),
-                                   Is + IndexOffset>>...}};
-    // The array `cache` holds pointers to member functions, so we dereference
-    // the pointer and invoke it on `this`.
-#if defined(__GNUC__) && !defined(__clang__) && __GNUC__ > 10 && __GNUC__ < 14
-#pragma GCC diagnostic push
-#pragma GCC diagnostic ignored "-Warray-bounds"
-#endif
-    return (this->*gsl::at(cache, std::get<0>(parameter0) - IndexOffset))(
-        parameters...);
-#if defined(__GNUC__) && !defined(__clang__) && __GNUC__ > 10 && __GNUC__ < 14
-#pragma GCC diagnostic pop
-#endif
-  }
-
-  template <typename... IntegralConstantValues, typename EnumType,
-            EnumType... EnumValues, typename... Args>
-  const T& unwrap_cache(
-      std::tuple<size_t, CacheEnumeration<EnumType, EnumValues...>>
-          parameter0,
-      Args... parameters) const {
-    // note that the act of assigning to the specified function pointer type
-    // fixes the template arguments that need to be inferred.
-    static const std::array<
-        const T& (StaticCache<Generator, T, Ranges...>::*)(Args...) const,
-        sizeof...(EnumValues)>
-        cache{{&StaticCache<Generator, T, Ranges...>::unwrap_cache<
-            IntegralConstantValues...,
-            std::integral_constant<EnumType, EnumValues>>...}};
+            IntegralConstantValues..., IntegralConstants>...}};
     // The array `cache` holds pointers to member functions, so we dereference
     // the pointer and invoke it on `this`.
 #if defined(__GNUC__) && !defined(__clang__) && __GNUC__ > 10 && __GNUC__ < 14
