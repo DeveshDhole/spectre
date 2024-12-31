@@ -34,6 +34,7 @@ template <typename EnumerationType, EnumerationType... Enums>
 struct CacheEnumeration {
   constexpr static size_t size = sizeof...(Enums);
   using value_type = EnumerationType;
+  static constexpr std::array<value_type, size> values{Enums...};
 };
 
 /// \ingroup UtilitiesGroup
@@ -89,7 +90,19 @@ class StaticCache {
       static_assert(
         std::is_same<typename Range::value_type, std::remove_cv_t<T1>>::value,
         "Mismatched enum parameter type and cached type.");
-      return std::tuple<std::remove_cv_t<T1>, Range>{parameter, Range{}};
+      size_t array_location = std::numeric_limits<size_t>::max();
+      static const std::array<typename Range::value_type, Range::size> values{
+          Range::values};
+      for (size_t i = 0; i < Range::size; ++i) {
+        if (parameter == gsl::at(values, i)) {
+          array_location = i;
+          break;
+        }
+      }
+      if (UNLIKELY(array_location == std::numeric_limits<size_t>::max())) {
+        ERROR("Uncached enumeration value: " << parameter);
+      }
+      return std::tuple<size_t, Range>{array_location, Range{}};
     } else {
       static_assert(
           tt::is_integer_v<std::remove_cv_t<T1>>,
@@ -157,21 +170,9 @@ class StaticCache {
   template <typename... IntegralConstantValues, typename EnumType,
             EnumType... EnumValues, typename... Args>
   const T& unwrap_cache(
-      std::tuple<EnumType, CacheEnumeration<EnumType, EnumValues...>>
+      std::tuple<size_t, CacheEnumeration<EnumType, EnumValues...>>
           parameter0,
       Args... parameters) const {
-    size_t array_location = std::numeric_limits<size_t>::max();
-    static const std::array<EnumType, sizeof...(EnumValues)> values{
-        {EnumValues...}};
-    for (size_t i = 0; i < sizeof...(EnumValues); ++i) {
-      if (std::get<0>(parameter0) == gsl::at(values, i)) {
-        array_location = i;
-        break;
-      }
-    }
-    if (UNLIKELY(array_location == std::numeric_limits<size_t>::max())) {
-      ERROR("Uncached enumeration value: " << std::get<0>(parameter0));
-    }
     // note that the act of assigning to the specified function pointer type
     // fixes the template arguments that need to be inferred.
     static const std::array<
@@ -186,7 +187,7 @@ class StaticCache {
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Warray-bounds"
 #endif
-    return (this->*gsl::at(cache, array_location))(parameters...);
+    return (this->*gsl::at(cache, std::get<0>(parameter0)))(parameters...);
 #if defined(__GNUC__) && !defined(__clang__) && __GNUC__ > 10 && __GNUC__ < 14
 #pragma GCC diagnostic pop
 #endif
