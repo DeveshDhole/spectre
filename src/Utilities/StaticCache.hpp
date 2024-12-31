@@ -83,26 +83,23 @@ class StaticCache {
   }
 
  private:
-  template <typename Range, typename T1,
-            Requires<not std::is_enum<T1>::value> = nullptr>
+  template <typename Range, typename T1>
   auto generate_tuple(const T1 parameter) const {
-    static_assert(
-        tt::is_integer_v<std::remove_cv_t<T1>>,
-        "The parameter passed for a CacheRange must be an integer type.");
-    return std::make_tuple(
-        static_cast<typename Range::value_type>(parameter),
-        std::integral_constant<typename Range::value_type, Range::start>{},
-        std::make_integer_sequence<typename Range::value_type, Range::size>{});
-  }
-
-  template <typename Range, typename T1,
-            Requires<std::is_enum<T1>::value> = nullptr>
-  std::tuple<std::remove_cv_t<T1>, Range> generate_tuple(
-      const T1 parameter) const {
-    static_assert(
+    if constexpr (std::is_enum<T1>::value) {
+      static_assert(
         std::is_same<typename Range::value_type, std::remove_cv_t<T1>>::value,
         "Mismatched enum parameter type and cached type.");
-    return {parameter, Range{}};
+      return std::tuple<std::remove_cv_t<T1>, Range>{parameter, Range{}};
+    } else {
+      static_assert(
+          tt::is_integer_v<std::remove_cv_t<T1>>,
+          "The parameter passed for a CacheRange must be an integer type.");
+      return std::make_tuple(
+          static_cast<typename Range::value_type>(parameter),
+          std::integral_constant<typename Range::value_type, Range::start>{},
+          std::make_integer_sequence<typename Range::value_type,
+                                     Range::size>{});
+    }
   }
 
   template <typename... IntegralConstantValues>
