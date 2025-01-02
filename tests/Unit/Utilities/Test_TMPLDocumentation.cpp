@@ -575,41 +575,45 @@ assert_same<tmpl::reverse_range<size_t, 7, 7>, tmpl::list<>>();
 namespace list_query {
 void run() {
 // [tmpl::all]
-assert_same<tmpl::all<List1<tmpl::size_t<0>, tmpl::size_t<1>, tmpl::size_t<2>>>,
-            tmpl::false_type>();
-assert_same<tmpl::all<List1<tmpl::size_t<1>, tmpl::size_t<1>, tmpl::size_t<2>>>,
-            tmpl::true_type>();
-assert_same<tmpl::all<List1<tmpl::size_t<0>, tmpl::size_t<1>, tmpl::size_t<2>>,
-                      tmpl::less<tmpl::_1, tmpl::size_t<2>>>,
-            tmpl::false_type>();
-assert_same<tmpl::all<List1<tmpl::size_t<0>, tmpl::size_t<1>, tmpl::size_t<0>>,
-                      tmpl::less<tmpl::_1, tmpl::size_t<2>>>,
-            tmpl::true_type>();
-assert_same<tmpl::all<List1<>>, tmpl::true_type>();
+static_assert(not tmpl::all<
+  List1<tmpl::size_t<0>, tmpl::size_t<1>, tmpl::size_t<2>>>::value);
+static_assert(tmpl::all<
+  List1<tmpl::size_t<1>, tmpl::size_t<1>, tmpl::size_t<2>>>::value);
+static_assert(not tmpl::all<
+  List1<tmpl::size_t<0>, tmpl::size_t<1>, tmpl::size_t<2>>,
+  tmpl::less<tmpl::_1, tmpl::size_t<2>>>::value);
+static_assert(tmpl::all<
+  List1<tmpl::size_t<0>, tmpl::size_t<1>, tmpl::size_t<0>>,
+  tmpl::less<tmpl::_1, tmpl::size_t<2>>>::value);
+static_assert(tmpl::all<List1<>>::value);
 // [tmpl::all]
 
 // [tmpl::all:inhomogeneous]
-assert_same<tmpl::all<List1<std::true_type, tmpl::true_type>, tmpl::_1>,
-            tmpl::false_type>();
+#ifndef __CUDACC__
+static_assert(not tmpl::all<
+  List1<std::true_type, tmpl::true_type>, tmpl::_1>::value);
+#endif
 // [tmpl::all:inhomogeneous]
 
 // [tmpl::any]
-assert_same<tmpl::any<List1<tmpl::size_t<0>, tmpl::size_t<1>, tmpl::size_t<2>>>,
-            tmpl::true_type>();
-assert_same<tmpl::any<List1<tmpl::size_t<0>, tmpl::size_t<0>, tmpl::size_t<0>>>,
-            tmpl::false_type>();
-assert_same<tmpl::any<List1<tmpl::size_t<0>, tmpl::size_t<1>, tmpl::size_t<2>>,
-                      tmpl::less<tmpl::_1, tmpl::size_t<2>>>,
-            tmpl::true_type>();
-assert_same<tmpl::any<List1<tmpl::size_t<4>, tmpl::size_t<3>, tmpl::size_t<2>>,
-                      tmpl::less<tmpl::_1, tmpl::size_t<2>>>,
-            tmpl::false_type>();
-assert_same<tmpl::any<List1<>>, tmpl::false_type>();
+static_assert(tmpl::any<
+  List1<tmpl::size_t<0>, tmpl::size_t<1>, tmpl::size_t<2>>>::value);
+static_assert(not tmpl::any<
+  List1<tmpl::size_t<0>, tmpl::size_t<0>, tmpl::size_t<0>>>::value);
+static_assert(tmpl::any<
+  List1<tmpl::size_t<0>, tmpl::size_t<1>, tmpl::size_t<2>>,
+  tmpl::less<tmpl::_1, tmpl::size_t<2>>>::value);
+static_assert(not tmpl::any<
+  List1<tmpl::size_t<4>, tmpl::size_t<3>, tmpl::size_t<2>>,
+  tmpl::less<tmpl::_1, tmpl::size_t<2>>>::value);
+static_assert(not tmpl::any<List1<>>::value);
 // [tmpl::any]
 
 // [tmpl::any:inhomogeneous]
-assert_same<tmpl::any<List1<std::false_type, tmpl::false_type>, tmpl::_1>,
-            tmpl::true_type>();
+#ifndef __CUDACC__
+static_assert(tmpl::any<
+  List1<std::false_type, tmpl::false_type>, tmpl::_1>::value);
+#endif
 // [tmpl::any:inhomogeneous]
 
 // [tmpl::at]
@@ -691,26 +695,24 @@ HAS_LAZY_VERSION(list_contains);
 }
 
 // [tmpl::none]
-assert_same<
-  tmpl::none<List1<tmpl::size_t<0>, tmpl::size_t<1>, tmpl::size_t<2>>>,
-  tmpl::false_type>();
-assert_same<
-  tmpl::none<List1<tmpl::size_t<0>, tmpl::size_t<0>, tmpl::size_t<0>>>,
-  tmpl::true_type>();
-assert_same<
-  tmpl::none<List1<tmpl::size_t<0>, tmpl::size_t<1>, tmpl::size_t<2>>,
-             tmpl::less<tmpl::_1, tmpl::size_t<2>>>,
-  tmpl::false_type>();
-assert_same<
-  tmpl::none<List1<tmpl::size_t<4>, tmpl::size_t<3>, tmpl::size_t<2>>,
-             tmpl::less<tmpl::_1, tmpl::size_t<2>>>,
-  tmpl::true_type>();
-assert_same<tmpl::none<List1<>>, tmpl::true_type>();
+static_assert(not tmpl::none<
+  List1<tmpl::size_t<0>, tmpl::size_t<1>, tmpl::size_t<2>>>::value);
+static_assert(tmpl::none<
+  List1<tmpl::size_t<0>, tmpl::size_t<0>, tmpl::size_t<0>>>::value);
+static_assert(not tmpl::none<
+  List1<tmpl::size_t<0>, tmpl::size_t<1>, tmpl::size_t<2>>,
+  tmpl::less<tmpl::_1, tmpl::size_t<2>>>::value);
+static_assert(tmpl::none<
+  List1<tmpl::size_t<4>, tmpl::size_t<3>, tmpl::size_t<2>>,
+  tmpl::less<tmpl::_1, tmpl::size_t<2>>>::value);
+static_assert(tmpl::none<List1<>>::value);
 // [tmpl::none]
 
 // [tmpl::none:inhomogeneous]
-assert_same<tmpl::none<List1<std::false_type, tmpl::false_type>, tmpl::_1>,
-            tmpl::false_type>();
+#ifndef __CUDACC__
+static_assert(not tmpl::none<
+  List1<std::false_type, tmpl::false_type>, tmpl::_1>::value);
+#endif
 // [tmpl::none:inhomogeneous]
 
 // [tmpl::not_found]

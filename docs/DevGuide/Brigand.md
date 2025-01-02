@@ -813,7 +813,7 @@ predicate checks that the element's `value` is not equal to zero.
 
 \note
 The predicate must return the same true value for each element for `all` to
-return true.
+return true. This behaviour may differ by compiler, so it can't be relied upon.
 \snippet Test_TMPLDocumentation.cpp tmpl::all:inhomogeneous
 
 \see \ref any "tmpl::any", \ref none "tmpl::none"
@@ -836,7 +836,7 @@ expensive predicates.
 
 \note
 The predicate must return the same false value for each element for `any` to
-return false.
+return false. This behaviour may differ by compiler, so it can't be relied upon.
 \snippet Test_TMPLDocumentation.cpp tmpl::any:inhomogeneous
 
 \see \ref all "tmpl::all", \ref found "tmpl::found", \ref none "tmpl::none"
@@ -963,7 +963,7 @@ See \ref any "tmpl::any" for discussion.
 
 \note
 The predicate must return the same false value for each element for `none` to
-return true.
+return true. This behaviour may differ by compiler, so it can't be relied upon.
 \snippet Test_TMPLDocumentation.cpp tmpl::none:inhomogeneous
 
 \see \ref all "tmpl::all", \ref any "tmpl::any", \ref not_found
