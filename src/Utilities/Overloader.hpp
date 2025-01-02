@@ -3,10 +3,6 @@
 
 #pragma once
 
-#include <utility>
-
-#include "Utilities/ForceInline.hpp"
-
 /*!
  * \ingroup UtilitiesGroup
  * \brief Used for overloading lambdas, useful for lambda-SFINAE
