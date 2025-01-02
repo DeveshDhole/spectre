@@ -108,6 +108,17 @@ set_property(TARGET Boost::boost
   INTERFACE_COMPILE_DEFINITIONS
   $<$<COMPILE_LANGUAGE:CXX>:BOOST_ALLOW_DEPRECATED_HEADERS>)
 
+# Old versions of boost only enabled variadic macros for known compilers.
+# This changed in boost 1.75.0, where variadic macros are always enabled.
+# We enable this here manually for older versions of boost so the code compiles
+# with nvcc.
+if(Boost_VERSION VERSION_LESS 1.75.0)
+  set_property(TARGET Boost::boost
+    APPEND PROPERTY
+    INTERFACE_COMPILE_DEFINITIONS
+    $<$<COMPILE_LANGUAGE:CXX>:BOOST_PP_VARIADICS=1>)
+endif()
+
 # Override the boost index type to match the STL for Boost.MultiArray
 # (std::ptrdiff_t to std::size_t)
 # Note: This header guard changed in Boost 1.73.0
