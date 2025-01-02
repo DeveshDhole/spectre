@@ -16,15 +16,20 @@ runs:
   using: "composite"
   steps:
     - run: |
-        if [[ ${{ inputs.compiler }} =~ (gcc|clang)-([0-9\.]+) ]]; then
+        if [[ ${{ inputs.compiler }} =~ (gcc|clang|nvcc)-([0-9\.\-]+) ]]; then
           COMPILER_ID=${BASH_REMATCH[1]}
           COMPILER_VERSION=${BASH_REMATCH[2]}
-          CC=${COMPILER_ID}-${COMPILER_VERSION};
           if [[ $COMPILER_ID = gcc ]]; then
+            CC=gcc-${COMPILER_VERSION};
             CXX=g++-${COMPILER_VERSION};
             FC=gfortran-${COMPILER_VERSION};
-          else
+          elif [[ $COMPILER_ID = clang ]]; then
+            CC=clang-${COMPILER_VERSION};
             CXX=clang++-${COMPILER_VERSION};
+            FC=gfortran-11;
+          elif [[ $COMPILER_ID = nvcc ]]; then
+            CC=gcc;
+            CXX=nvcc;
             FC=gfortran-11;
           fi
         fi

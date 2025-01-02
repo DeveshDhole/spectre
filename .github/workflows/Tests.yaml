@@ -492,16 +492,26 @@ jobs:
             # Test `install` target with clang in Release mode because it uses
             # little disk space
             install: ON
+          - compiler: nvcc-12-6
+            CUDA: ON
+            # Compile in Release mode to speed up the build
+            build_type: Release
+            # Build only a subset of the code because compiling the full code is
+            # too slow and exceeds the available memory. We should extend this
+            # to the full code once we have a better solution for the memory
+            # issue. See 'Test nvcc support' step below.
+            unit_tests: OFF
+            test_executables: OFF
+            # Enable PlaneWave3D.yaml input file test
+            input_file_tests_min_priority: "normal"
+            # Disable pybindings until they support nvcc
+            BUILD_PYTHON_BINDINGS: OFF
+            # Disable warnings as nvcc emits a lot of them from system headers
+            ENABLE_WARNINGS: OFF
 
     container:
       image: ${{ inputs.container || 'sxscollaboration/spectre:dev' }}
       env:
-        # We run unit tests with the following compiler flags:
-        # - `-Werror`: Treat warnings as error.
-        # - `-march=x86-64`: Make sure we are building on a consistent
-        #   architecture so caching works. This is necessary because GitHub
-        #   may run the job on different hardware.
-        CXXFLAGS: "-Werror"
         # We make sure to use a fixed absolute path for the ccache directory
         CCACHE_DIR: /work/ccache
         # Use a separate temp directory to conserve cache space on GitHub
@@ -551,8 +561,19 @@ jobs:
           apt-get update -y
           if [[ $COMPILER_ID = gcc ]]; then
             apt-get install -y $CC $CXX $FC
-          else
+          elif [[ $COMPILER_ID = clang ]]; then
             apt-get install -y $CC $FC
+          elif [[ $COMPILER_ID = nvcc ]]; then
+            # Install CUDA
+            wget https://developer.download.nvidia.com/compute/cuda/repos/ubuntu2204/x86_64/cuda-keyring_1.1-1_all.deb
+            dpkg -i cuda-keyring_1.1-1_all.deb
+            apt-get update -y
+            apt-get install -y cuda-nvcc-${COMPILER_VERSION}
+            echo "/usr/local/cuda-${COMPILER_VERSION/-/.}/bin" >> $GITHUB_PATH
+            # Install Kokkos compiler wrapper
+            git clone https://github.com/kokkos/kokkos
+            CXX=$PWD/kokkos/bin/nvcc_wrapper
+            echo "CXX=$CXX" >> $GITHUB_ENV
           fi
       # Install specific CMake version if requested
       - name: Install CMake version
@@ -632,9 +653,17 @@ ${{ matrix.build_type }}-pch-${{ matrix.use_pch || 'ON' }}"
         # Notes on the build configuration:
         # - We don't need debug symbols during CI, so we turn them off to reduce
         #   memory usage.
+        # - We run unit tests with the following compiler flags:
+        #   -Werror: Treat warnings as error.
+        #   -march=x86-64: Make sure we are building on a consistent
+        #   architecture so caching works. This is necessary because GitHub may
+        #   run the job on different hardware.
         run: >
           mkdir build && cd build
 
+          ENABLE_WARNINGS=${{ matrix.ENABLE_WARNINGS }}
+          WERROR="${{ matrix.WERROR != 'OFF' && '-Werror' || '' }}"
+          CXX_FLAGS="${WERROR} ${{ matrix.EXTRA_CXX_FLAGS }}"
           BUILD_PYTHON_BINDINGS=${{ matrix.BUILD_PYTHON_BINDINGS }}
           BUILD_SHARED_LIBS=${{ matrix.BUILD_SHARED_LIBS }}
           MATRIX_CHARM_ROOT=${{ matrix.CHARM_ROOT }}
@@ -654,8 +683,9 @@ ${{ matrix.build_type }}-pch-${{ matrix.use_pch || 'ON' }}"
           -D CMAKE_C_COMPILER=${CC}
           -D CMAKE_CXX_COMPILER=${CXX}
           -D CMAKE_Fortran_COMPILER=${FC}
-          -D CMAKE_CXX_FLAGS="${CXXFLAGS} ${{ matrix.EXTRA_CXX_FLAGS }}"
+          -D CMAKE_CXX_FLAGS="${CXX_FLAGS}"
           -D OVERRIDE_ARCH=x86-64
+          -D ENABLE_WARNINGS=${ENABLE_WARNINGS:-'ON'}
           -D CHARM_ROOT=${MATRIX_CHARM_ROOT:-$CHARM_ROOT}
           -D CMAKE_BUILD_TYPE=${{ matrix.build_type }}
           -D DEBUG_SYMBOLS=OFF
@@ -723,6 +753,22 @@ ${{ matrix.build_type }}-pch-${{ matrix.use_pch || 'ON' }}"
         # We currently don't require codecov in our guidelines, so don't fail
         # the CI build if codecov fails to upload
         continue-on-error: true
+      # Test only a few unit tests with nvcc for now because compiling the full
+      # suite is too slow and exceed the available memory. We should extend this
+      # to the full suite once we have a better solution for the memory issue.
+      - name: Test nvcc support
+        if: matrix.CUDA == 'ON'
+        working-directory: build
+        run: |
+          make -j${NUMBER_OF_CORES} \
+            Test_DataStructures \
+            Test_Spectral \
+            Test_Utilities \
+            EvolveScalarWave3D
+          ./bin/Test_DataStructures
+          ./bin/Test_Spectral
+          ./bin/Test_Utilities
+          ctest -R PlaneWave3D.yaml --output-on-failure
       # Avoid running out of disk space by cleaning up the build directory
       - name: Clean up unit tests
         working-directory: build
@@ -803,7 +849,10 @@ ${{ matrix.build_type }}-pch-${{ matrix.use_pch || 'ON' }}"
         #   compiler version.
         # - We make sure to use the same compiler flags as the full build above
         #   so ccache is able to speed up the build.
-        if: matrix.build_type == 'Debug' && matrix.ASAN != 'ON'
+        if: >
+          matrix.build_type == 'Debug'
+            && matrix.ASAN != 'ON'
+            && matrix.test_executables != 'OFF'
         working-directory: build
         run: >
           make EvolveBurgers -j${NUMBER_OF_CORES}
@@ -828,6 +877,9 @@ ${{ matrix.build_type }}-pch-${{ matrix.use_pch || 'ON' }}"
           mkdir build-formaline;
           cd build-formaline
 
+          ENABLE_WARNINGS=${{ matrix.ENABLE_WARNINGS }}
+          WERROR="${{ matrix.WERROR != 'OFF' && '-Werror' || '' }}"
+          CXX_FLAGS="${WERROR} ${{ matrix.EXTRA_CXX_FLAGS }}"
           BUILD_PYTHON_BINDINGS=${{ matrix.BUILD_PYTHON_BINDINGS }}
           MATRIX_CHARM_ROOT=${{ matrix.CHARM_ROOT }}
           MEMORY_ALLOCATOR=${{ matrix.MEMORY_ALLOCATOR }};
@@ -838,8 +890,9 @@ ${{ matrix.build_type }}-pch-${{ matrix.use_pch || 'ON' }}"
           -D CMAKE_C_COMPILER=${CC}
           -D CMAKE_CXX_COMPILER=${CXX}
           -D CMAKE_Fortran_COMPILER=${FC}
-          -D CMAKE_CXX_FLAGS="${CXXFLAGS} ${{ matrix.EXTRA_CXX_FLAGS }}"
+          -D CMAKE_CXX_FLAGS="${CXX_FLAGS}"
           -D OVERRIDE_ARCH=x86-64
+          -D ENABLE_WARNINGS=${ENABLE_WARNINGS:-'ON'}
           -D BUILD_SHARED_LIBS=ON
           -D CHARM_ROOT=${MATRIX_CHARM_ROOT:-$CHARM_ROOT}
           -D CMAKE_BUILD_TYPE=${{ matrix.build_type }}
