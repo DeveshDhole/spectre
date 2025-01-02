@@ -18,6 +18,8 @@ function(create_compile_flag_target LANGUAGE XTYPE FLAG_TO_CHECK TARGET_NAME)
   # In order to check for a -Wno-* flag in gcc, you have to check the
   # -W* version instead.  See http://gcc.gnu.org/wiki/FAQ#wnowarning
   string(REGEX REPLACE ^-Wno- -W POSITIVE_FLAG_TO_CHECK ${FLAG_TO_CHECK})
+  # Escape quotes for compiler command
+  string(REPLACE "\"" "\\\"" POSITIVE_FLAG_TO_CHECK ${POSITIVE_FLAG_TO_CHECK})
   execute_process(
     COMMAND
     bash -c
@@ -31,6 +33,7 @@ ${POSITIVE_FLAG_TO_CHECK} -x ${XTYPE} \
     add_library(${TARGET_NAME} INTERFACE)
   endif(NOT TARGET ${TARGET_NAME})
   if(${RESULT} EQUAL 0)
+    string(REPLACE " " ";" FLAG_TO_CHECK ${FLAG_TO_CHECK})
     set_property(TARGET ${TARGET_NAME}
       APPEND PROPERTY
       INTERFACE_COMPILE_OPTIONS

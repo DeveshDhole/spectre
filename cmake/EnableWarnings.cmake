@@ -74,6 +74,16 @@ if (CMAKE_CXX_COMPILER_ID STREQUAL "GNU"
     )
 endif()
 
+# Suppress CUDA warnings that we don't want
+create_cxx_flag_target(
+  "-Xcudafe \"--diag_suppress=186,191,554,1301,1305,2189,3060\""
+  SpectreCudaWarnings)
+target_link_libraries(
+  SpectreWarnings
+  INTERFACE
+  SpectreCudaWarnings
+  )
+
 target_link_libraries(
   SpectreFlags
   INTERFACE
