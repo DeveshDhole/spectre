@@ -5,6 +5,14 @@
 
 #include <csignal>
 
+// Blaze 3.8.2 has a missing include that causes nvcc to fail
+// (fixed in https://bitbucket.org/blaze-lib/blaze/pull-requests/63).
+// We just include it here to fix the issue.
+// NOLINTBEGIN
+#include <blaze/util/EnableIf.h>
+#include <blaze/math/traits/ReduceTrait.h>
+// NOLINTEND
+
 #ifdef __CUDA_ARCH__
 // When building for Nvidia GPUs we need to disable the use of vector
 // intrinsics.
