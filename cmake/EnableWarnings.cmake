@@ -76,7 +76,7 @@ endif()
 
 # Suppress CUDA warnings that we don't want
 create_cxx_flag_target(
-  "-Xcudafe \"--diag_suppress=186,191,554,1301,1305,2189,3060\""
+  "-Xcudafe \"--diag_suppress=177,186,191,554,1301,1305,2189,3060,20012\""
   SpectreCudaWarnings)
 target_link_libraries(
   SpectreWarnings
