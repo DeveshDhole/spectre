@@ -21,7 +21,6 @@ set(LIBRARY_SOURCES
   Subcell/Test_PrimitiveGhostData.cpp
   Subcell/Test_PrimsAfterRollback.cpp
   Subcell/Test_ResizeAndComputePrimitives.cpp
-  Subcell/Test_TimeDerivative.cpp
   Test_Characteristics.cpp
   Test_Constraints.cpp
   Test_SetPiAndPhiFromConstraints.cpp
@@ -29,6 +28,12 @@ set(LIBRARY_SOURCES
   Test_Tags.cpp
   Test_TimeDerivativeTerms.cpp
   )
+
+# The following test is disabled for nvcc because nvcc can't handle it
+# (it runs out of memory).
+if(NOT ${KOKKOS_CXX_COMPILER_ID} STREQUAL "NVIDIA")
+  list(APPEND LIBRARY_SOURCES Subcell/Test_TimeDerivative.cpp)
+endif()
 
 add_test_library(${LIBRARY} "${LIBRARY_SOURCES}")
 

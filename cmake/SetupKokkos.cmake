@@ -47,4 +47,18 @@ if(SPECTRE_KOKKOS)
     )
     FetchContent_MakeAvailable(Kokkos)
   endif()
+else()
+  # We don't have Kokkos enabled, so we fall back to checking manually if the
+  # compiler is NVIDIA's nvcc.
+  execute_process(
+    COMMAND ${CMAKE_CXX_COMPILER} --version
+    OUTPUT_VARIABLE _COMPILER_VERSION
+    OUTPUT_STRIP_TRAILING_WHITESPACE)
+  string(REPLACE "\n" " " _COMPILER_VERSION ${_COMPILER_VERSION})
+  string(FIND ${_COMPILER_VERSION} "nvcc" _COMPILER_IS_NVCC)
+  if(${_COMPILER_IS_NVCC} GREATER -1)
+    set(KOKKOS_CXX_COMPILER_ID "NVIDIA")
+  else()
+    set(KOKKOS_CXX_COMPILER_ID ${CMAKE_CXX_COMPILER_ID})
+  endif()
 endif()
