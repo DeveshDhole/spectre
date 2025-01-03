@@ -77,8 +77,8 @@ struct Metavariables {
       KrylovSolver, true, typename nonlinear_solver::linear_solver_source_tag,
       LinearSolver::multigrid::Tags::IsFinestGrid>;
   using multigrid = LinearSolver::multigrid::Multigrid<
-      Metavariables, typename linear_solver::operand_tag, MultigridSolver,
-      helpers_mg::OperatorIsMassive,
+      Metavariables, volume_dim, typename linear_solver::operand_tag,
+      MultigridSolver, helpers_mg::OperatorIsMassive,
       typename linear_solver::preconditioner_source_tag>;
   using smoother = LinearSolver::Richardson::Richardson<
       typename multigrid::smooth_fields_tag, RichardsonSmoother,

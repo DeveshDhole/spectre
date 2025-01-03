@@ -54,7 +54,7 @@ struct Metavariables {
 
   static constexpr size_t volume_dim = 3;
   using system = Punctures::FirstOrderSystem;
-  using solver = elliptic::Solver<Metavariables>;
+  using solver = elliptic::Solver<Metavariables, volume_dim, system>;
 
   using observe_integral_fields =
       tmpl::list<Punctures::Tags::AdmMassIntegrandCompute>;

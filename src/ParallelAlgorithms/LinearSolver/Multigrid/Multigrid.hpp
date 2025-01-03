@@ -117,12 +117,11 @@ struct VcycleUpLabel {};
  * fully, we have to send AMR decisions to coarser grids to refine those as
  * well.
  */
-template <typename Metavariables, typename FieldsTag, typename OptionsGroup,
-          typename ResidualIsMassiveTag,
+template <typename Metavariables, size_t Dim, typename FieldsTag,
+          typename OptionsGroup, typename ResidualIsMassiveTag,
           typename SourceTag =
               db::add_tag_prefix<::Tags::FixedSource, FieldsTag>>
 struct Multigrid {
-  static constexpr size_t Dim = Metavariables::volume_dim;
   using fields_tag = FieldsTag;
   using options_group = OptionsGroup;
   using source_tag = SourceTag;

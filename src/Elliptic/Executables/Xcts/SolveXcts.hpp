@@ -62,7 +62,7 @@ struct Metavariables {
   using system =
       Xcts::FirstOrderSystem<Xcts::Equations::HamiltonianLapseAndShift,
                              Xcts::Geometry::Curved, conformal_matter_scale>;
-  using solver = elliptic::Solver<Metavariables>;
+  using solver = elliptic::Solver<Metavariables, volume_dim, system>;
 
   static constexpr Options::String help{
       "Find the solution to an XCTS problem."};

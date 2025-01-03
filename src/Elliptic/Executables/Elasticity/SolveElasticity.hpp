@@ -64,7 +64,7 @@ struct Metavariables {
 
   static constexpr size_t volume_dim = Dim;
   using system = Elasticity::FirstOrderSystem<Dim>;
-  using solver = elliptic::Solver<Metavariables>;
+  using solver = elliptic::Solver<Metavariables, Dim, system>;
 
   using analytic_solution_fields = typename system::primal_fields;
   using error_compute = ::Tags::ErrorsCompute<analytic_solution_fields>;
