@@ -49,11 +49,17 @@ SetupLocalPythonEnvironment::SetupLocalPythonEnvironment(
     PyConfig_InitPythonConfig(&config);
     // Populate the Python config with the standard values
     status = PyConfig_Read(&config);
+    if (PyStatus_Exception(status) != 0) {
+      Py_ExitStatusException(status);
+    }
     // Don't produce the __pycache__ dir (python 3.2 and newer) or the .pyc
     // files (python 2.7) in the tests directory to avoid cluttering the source
     // tree. The overhead of not having the compile files is <= 0.01s
     config.write_bytecode = 0;
     status = Py_InitializeFromConfig(&config);
+    if (PyStatus_Exception(status) != 0) {
+      Py_ExitStatusException(status);
+    }
     PyConfig_Clear(&config);
 
     // Add directory for installed packages (see CMakeLists.txt for details)
