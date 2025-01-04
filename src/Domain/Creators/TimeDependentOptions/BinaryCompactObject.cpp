@@ -92,8 +92,8 @@ TimeDependentMapOptions<IsCylindrical>::create_worldtube_functions_of_time()
       std::make_unique<FunctionsOfTime::IntegratedFunctionOfTime>(
           initial_time_,
           std::array<double, 2>{
-              {{gsl::at(expansion_map_options_.value().initial_values, 0)},
-               {gsl::at(expansion_map_options_.value().initial_values, 1)}}},
+              {gsl::at(expansion_map_options_.value().initial_values, 0),
+               gsl::at(expansion_map_options_.value().initial_values, 1)}},
           initial_expiration_time, false);
   result[expansion_outer_boundary_name] =
       std::make_unique<FunctionsOfTime::FixedSpeedCubic>(
