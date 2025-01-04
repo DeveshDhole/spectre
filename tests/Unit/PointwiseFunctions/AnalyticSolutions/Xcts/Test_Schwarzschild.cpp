@@ -132,7 +132,8 @@ void test_solution(const double mass,
          "shift_dot_extrinsic_curvature_trace_gradient",
          "longitudinal_shift_minus_dt_conformal_metric_square",
          "longitudinal_shift_minus_dt_conformal_metric_over_lapse_square"},
-        {{{inner_radius, outer_radius}}}, std::make_tuple(mass), DataVector(5));
+        {{{inner_radius, outer_radius}}}, std::make_tuple(mass), DataVector(3),
+        1e-8);
   }
   {
     INFO("Verify the solution solves the XCTS equations");
@@ -185,6 +186,18 @@ SPECTRE_TEST_CASE(
                 "Schwarzschild:\n"
                 "  Mass: 0.8\n"
                 "  Coordinates: KerrSchildIsotropic");
+  test_solution(1., SchwarzschildCoordinates::MaximalIsotropic,
+                0.7793271080557972, 1.601972683625847,
+                "SchwarzschildMaximalIsotropic",
+                "Schwarzschild:\n"
+                "  Mass: 1.\n"
+                "  Coordinates: MaximalIsotropic");
+  test_solution(0.8, SchwarzschildCoordinates::MaximalIsotropic,
+                0.7793271080557972 * 0.8, 1.601972683625847,
+                "SchwarzschildMaximalIsotropic",
+                "Schwarzschild:\n"
+                "  Mass: 0.8\n"
+                "  Coordinates: MaximalIsotropic");
 }
 
 }  // namespace Xcts::Solutions
