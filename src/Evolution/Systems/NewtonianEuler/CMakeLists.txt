@@ -18,7 +18,6 @@ spectre_target_sources(
   RamPressure.cpp
   SoundSpeedSquared.cpp
   SpecificKineticEnergy.cpp
-  VolumeTermsInstantiation.cpp
   )
 
 spectre_target_headers(
