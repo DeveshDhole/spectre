@@ -40,6 +40,7 @@
 #include "Utilities/ErrorHandling/Error.hpp"
 #include "Utilities/FileSystem.hpp"
 #include "Utilities/Formaline.hpp"
+#include "Utilities/Kokkos/KokkosCore.hpp"
 #include "Utilities/MakeString.hpp"
 #include "Utilities/Overloader.hpp"
 #include "Utilities/StdHelpers.hpp"
@@ -278,6 +279,10 @@ void AtSyncIndicator<Metavariables>::ResumeFromSync() {
 
 template <typename Metavariables>
 Main<Metavariables>::Main(CkArgMsg* msg) {
+#ifdef SPECTRE_KOKKOS
+  Kokkos::initialize(msg->argc, msg->argv);
+#endif  // SPECTRE_KOKKOS
+
   Informer::print_startup_info(msg);
 
   /// \todo detail::register_events_to_trace();
@@ -785,6 +790,9 @@ void Main<Metavariables>::execute_next_phase() {
 
   if (Parallel::Phase::Exit == current_phase_) {
     check_if_component_terminated_correctly();
+#ifdef SPECTRE_KOKKOS
+    Kokkos::finalize();
+#endif  // SPECTRE_KOKKOS
     return;
   }
   tmpl::for_each<component_list>([this](auto parallel_component) {
