@@ -14,6 +14,7 @@
 #include <optional>
 #include <ostream>
 #include <string>
+#include <unordered_map>
 #include <vector>
 
 #include "DataStructures/DataVector.hpp"
@@ -417,8 +418,13 @@ std::vector<size_t> VolumeData::list_observation_ids() const {
   std::vector<size_t> obs_ids{
       boost::make_transform_iterator(names.begin(), helper),
       boost::make_transform_iterator(names.end(), helper)};
-  alg::sort(obs_ids, [this](const size_t lhs, const size_t rhs) {
-    return this->get_observation_value(lhs) < this->get_observation_value(rhs);
+  // pre-compute the observation values as they are expensive to evaluate
+  std::unordered_map<size_t, double> obs_values{obs_ids.size()};
+  for (const auto& id : obs_ids) {
+    obs_values[id] = this->get_observation_value(id);
+  }
+  alg::sort(obs_ids, [&obs_values](const size_t lhs, const size_t rhs) {
+    return obs_values[lhs] < obs_values[rhs];
   });
   return obs_ids;
 }
