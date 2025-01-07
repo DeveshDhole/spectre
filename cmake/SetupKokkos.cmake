@@ -47,18 +47,4 @@ if(SPECTRE_KOKKOS)
     )
     FetchContent_MakeAvailable(Kokkos)
   endif()
-
-  if (TARGET Kokkos::kokkos
-      AND Kokkos_ENABLE_CUDA
-      AND CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
-    if (${CUDAToolkit_VERSION_MAJOR}.${CUDAToolkit_VERSION_MINOR}
-        VERSION_GREATER 12.0)
-      message(STATUS "CUDA 12.1 is only partially supported by Clang")
-      set_property(TARGET Kokkos::kokkos
-        APPEND PROPERTY
-        INTERFACE_COMPILE_OPTIONS
-        $<$<COMPILE_LANGUAGE:CXX>:-Wno-unknown-cuda-version>
-      )
-    endif()
-  endif()
 endif()
