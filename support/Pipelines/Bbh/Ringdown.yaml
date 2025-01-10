@@ -22,6 +22,7 @@ InitialData:
     Variables:
       SpacetimeMetric: SpacetimeMetric
       Pi: Pi
+      Phi: Phi
 
 DomainCreator:
   Sphere:

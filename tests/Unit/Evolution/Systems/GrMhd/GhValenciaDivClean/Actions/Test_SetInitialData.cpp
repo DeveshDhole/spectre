@@ -60,6 +60,8 @@ struct MockElementArray {
   using metavariables = Metavariables;
   using chare_type = ActionTesting::MockArrayChare;
   using array_index = ElementId<3>;
+  using mutable_global_cache_tags =
+      tmpl::list<gh::Tags::SetPiAndPhiFromConstraints>;
   using phase_dependent_action_list = tmpl::list<
       Parallel::PhaseActions<
           Parallel::Phase::Initialization,
@@ -157,7 +159,7 @@ void test_set_initial_data(
   using element_array = MockElementArray<Metavariables>;
 
   ActionTesting::MockRuntimeSystem<Metavariables> runner{
-      initial_data.get_clone()};
+      {initial_data.get_clone()}, {true}};
 
   // We get test data from a TOV solution
   TovStar tov_star{
@@ -211,6 +213,8 @@ void test_set_initial_data(
 
   ActionTesting::set_phase(make_not_null(&runner), Parallel::Phase::Testing);
 
+  const auto& cache = ActionTesting::cache<element_array>(runner, element_id);
+
   // SetInitialData
   ActionTesting::next_action<element_array>(make_not_null(&runner), element_id);
 
@@ -218,6 +222,10 @@ void test_set_initial_data(
     INFO("Numeric initial data");
     const auto& numeric_id =
         dynamic_cast<const NumericInitialData&>(initial_data);
+
+    CHECK(Parallel::get<gh::Tags::SetPiAndPhiFromConstraints>(cache) ==
+          std::holds_alternative<gh::NumericInitialData::AdmVars>(
+              numeric_id.gh_numeric_id().selected_variables()));
 
     REQUIRE_FALSE(ActionTesting::next_action_if_ready<element_array>(
         make_not_null(&runner), element_id));
@@ -240,6 +248,8 @@ void test_set_initial_data(
           get<gr::Tags::SpacetimeMetric<DataVector, 3>>(tov_vars);
       get<gh::Tags::Pi<DataVector, 3>>(inbox) =
           get<gh::Tags::Pi<DataVector, 3>>(tov_vars);
+      get<gh::Tags::Phi<DataVector, 3>>(inbox) =
+          get<gh::Tags::Phi<DataVector, 3>>(tov_vars);
     } else if (std::holds_alternative<gh::NumericInitialData::AdmVars>(
                    gh_selected_vars)) {
       const auto tov_adm_vars = tov_star.variables(
@@ -302,6 +312,8 @@ void test_set_initial_data(
     // ReceiveNumericInitialData
     ActionTesting::next_action<element_array>(make_not_null(&runner),
                                               element_id);
+  } else {
+    CHECK(Parallel::get<gh::Tags::SetPiAndPhiFromConstraints>(cache));
   }
 
   // Check result. The GH variables are not particularly precise because we
@@ -337,7 +349,8 @@ SPECTRE_TEST_CASE("Unit.Evolution.Systems.GhValenciaDivClean.SetInitialData",
             0.,
             {1.0e-9},
             false,
-            gh::NumericInitialData::GhVars{"CustomSpacetimeMetric", "CustomPi"},
+            gh::NumericInitialData::GhVars{"CustomSpacetimeMetric", "CustomPi",
+                                           "CustomPhi"},
             {"CustomRho", "CustomUi", "CustomYe", "CustomB"},
             1.e-14},
         "NumericInitialData:\n"
@@ -349,6 +362,7 @@ SPECTRE_TEST_CASE("Unit.Evolution.Systems.GhValenciaDivClean.SetInitialData",
         "  GhVariables:\n"
         "    SpacetimeMetric: CustomSpacetimeMetric\n"
         "    Pi: CustomPi\n"
+        "    Phi: CustomPhi\n"
         "  HydroVariables:\n"
         "    RestMassDensity: CustomRho\n"
         "    LowerSpatialFourVelocity: CustomUi\n"

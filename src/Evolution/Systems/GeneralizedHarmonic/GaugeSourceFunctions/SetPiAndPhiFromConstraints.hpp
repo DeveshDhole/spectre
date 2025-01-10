@@ -21,6 +21,7 @@
 #include "Evolution/Initialization/Tags.hpp"
 #include "Evolution/Systems/GeneralizedHarmonic/GaugeSourceFunctions/Tags/GaugeCondition.hpp"
 #include "Evolution/Systems/GeneralizedHarmonic/Tags.hpp"
+#include "Parallel/GlobalCache.hpp"
 #include "Utilities/TMPL.hpp"
 
 /// \cond
@@ -29,7 +30,29 @@ struct Time;
 }  // namespace Tags
 /// \endcond
 
-namespace gh::gauges {
+namespace gh {
+namespace Tags {
+/// DataBox tag for holding whether or not to set GH variables $\Pi$ and $\Phi$
+/// from constraints.
+struct SetPiAndPhiFromConstraints : db::SimpleTag {
+  using type = bool;
+
+  using option_tags = tmpl::list<>;
+  static constexpr bool pass_metavariables = false;
+
+  static bool create_from_options() { return true; }
+};
+}  // namespace Tags
+
+namespace gauges {
+/*!
+ * \brief GlobalCache mutator to set the value of the
+ * `gh::Tags::SetPiAndPhiFromConstraints` tag.
+ */
+struct SetPiAndPhiFromConstraintsCacheMutator {
+  static void apply(gsl::not_null<bool*> value, bool new_value);
+};
+
 /*!
  * \brief Set \f$\Pi_{ab}\f$ from the gauge source function (or 1-index
  * constraint) and \f$\Phi_{iab}\f$ from the 3-index constraint.
@@ -50,9 +73,14 @@ struct SetPiAndPhiFromConstraints {
                  domain::Tags::FunctionsOfTime,
                  domain::Tags::Coordinates<Dim, Frame::ElementLogical>,
                  gr::Tags::SpacetimeMetric<DataVector, Dim>,
-                 gh::gauges::Tags::GaugeCondition>;
+                 gh::gauges::Tags::GaugeCondition,
+                 gh::Tags::SetPiAndPhiFromConstraints>;
 
+  using compute_tags = tmpl::list<
+      Parallel::Tags::FromGlobalCache<gh::Tags::SetPiAndPhiFromConstraints>>;
   using const_global_cache_tags = tmpl::list<gh::gauges::Tags::GaugeCondition>;
+  using mutable_global_cache_tags =
+      tmpl::list<gh::Tags::SetPiAndPhiFromConstraints>;
 
   static void apply(
       gsl::not_null<tnsr::aa<DataVector, Dim, Frame::Inertial>*> pi,
@@ -68,6 +96,8 @@ struct SetPiAndPhiFromConstraints {
       const tnsr::I<DataVector, Dim, Frame::ElementLogical>&
           logical_coordinates,
       const tnsr::aa<DataVector, Dim, Frame::Inertial>& spacetime_metric,
-      const gauges::GaugeCondition& gauge_condition);
+      const gauges::GaugeCondition& gauge_condition,
+      bool set_pi_and_phi_from_constraints = true);
 };
-}  // namespace gh::gauges
+}  // namespace gauges
+}  // namespace gh

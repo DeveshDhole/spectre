@@ -25,6 +25,7 @@
 #include "Domain/FunctionsOfTime/FunctionOfTime.hpp"
 #include "Domain/Tags.hpp"
 #include "Evolution/Initialization/Tags.hpp"
+#include "Evolution/Systems/GeneralizedHarmonic/Actions/SetInitialData.hpp"
 #include "Evolution/Systems/GeneralizedHarmonic/Constraints.hpp"
 #include "Evolution/Systems/GeneralizedHarmonic/GaugeSourceFunctions/DampedHarmonic.hpp"
 #include "Evolution/Systems/GeneralizedHarmonic/GaugeSourceFunctions/Dispatch.hpp"
@@ -84,6 +85,44 @@ void test(const gsl::not_null<std::mt19937*> generator) {
         .get(i + 1, 0) *= 0.01;
   }
 
+  // Testing SetPiAndPhiFromConstraints = False. Note that we put the
+  // SetPiAndPhiFromConstraints tag in the box here because we don't have a
+  // cache.
+  {
+    auto box = db::create<db::AddSimpleTags<
+        ::Tags::Time, ::Tags::Variables<evolved_vars_tags>,
+        domain::Tags::Mesh<Dim>, domain::Tags::ElementMap<Dim, Frame::Grid>,
+        domain::CoordinateMaps::Tags::CoordinateMap<Dim, Frame::Grid,
+                                                    Frame::Inertial>,
+        domain::Tags::FunctionsOfTimeInitialize,
+        domain::Tags::Coordinates<Dim, Frame::ElementLogical>,
+        gh::gauges::Tags::GaugeCondition,
+        gh::Tags::SetPiAndPhiFromConstraints>>(
+        0., evolved_vars, mesh,
+        ElementMap<Dim, Frame::Grid>{
+            ElementId<Dim>{0},
+            domain::make_coordinate_map_base<Frame::BlockLogical, Frame::Grid>(
+                domain::CoordinateMaps::Identity<Dim>{})},
+        domain::make_coordinate_map_base<Frame::Grid, Frame::Inertial>(
+            domain::CoordinateMaps::Identity<Dim>{}),
+        std::unordered_map<
+            std::string,
+            std::unique_ptr<domain::FunctionsOfTime::FunctionOfTime>>{},
+        logical_coordinates(mesh),
+        std::unique_ptr<gh::gauges::GaugeCondition>(
+            std::make_unique<gh::gauges::DampedHarmonic>(
+                100., std::array{1.2, 1.5, 1.7}, std::array{2, 4, 6})),
+        false);
+    db::mutate_apply<gh::gauges::SetPiAndPhiFromConstraints<Dim>>(
+        make_not_null(&box));
+
+    // Should be exact since we didn't compute anything
+    CHECK(get<gh::Tags::Pi<DataVector, Dim>>(evolved_vars) ==
+          db::get<gh::Tags::Pi<DataVector, Dim>>(box));
+    CHECK(get<gh::Tags::Phi<DataVector, Dim>>(evolved_vars) ==
+          db::get<gh::Tags::Phi<DataVector, Dim>>(box));
+  }
+
   auto box = db::create<db::AddSimpleTags<
       ::Tags::Time, ::Tags::Variables<evolved_vars_tags>,
       domain::Tags::Mesh<Dim>, domain::Tags::ElementMap<Dim, Frame::Grid>,
@@ -91,7 +130,7 @@ void test(const gsl::not_null<std::mt19937*> generator) {
                                                   Frame::Inertial>,
       domain::Tags::FunctionsOfTimeInitialize,
       domain::Tags::Coordinates<Dim, Frame::ElementLogical>,
-      gh::gauges::Tags::GaugeCondition>>(
+      gh::gauges::Tags::GaugeCondition, gh::Tags::SetPiAndPhiFromConstraints>>(
       0., evolved_vars, mesh,
       ElementMap<Dim, Frame::Grid>{
           ElementId<Dim>{0},
@@ -105,7 +144,8 @@ void test(const gsl::not_null<std::mt19937*> generator) {
       logical_coordinates(mesh),
       std::unique_ptr<gh::gauges::GaugeCondition>(
           std::make_unique<gh::gauges::DampedHarmonic>(
-              100., std::array{1.2, 1.5, 1.7}, std::array{2, 4, 6})));
+              100., std::array{1.2, 1.5, 1.7}, std::array{2, 4, 6})),
+      true);
   db::mutate_apply<gh::gauges::SetPiAndPhiFromConstraints<Dim>>(
       make_not_null(&box));
 

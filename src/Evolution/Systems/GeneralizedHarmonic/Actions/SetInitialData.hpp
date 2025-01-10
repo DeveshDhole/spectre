@@ -9,11 +9,13 @@
 #include <variant>
 
 #include "DataStructures/DataBox/DataBox.hpp"
+#include "DataStructures/DataBox/Tag.hpp"
 #include "DataStructures/DataVector.hpp"
 #include "DataStructures/Tensor/Tensor.hpp"
 #include "Domain/Structure/ElementId.hpp"
 #include "Domain/Tags.hpp"
 #include "Evolution/Initialization/InitialData.hpp"
+#include "Evolution/Systems/GeneralizedHarmonic/GaugeSourceFunctions/SetPiAndPhiFromConstraints.hpp"
 #include "Evolution/Systems/GeneralizedHarmonic/Tags.hpp"
 #include "IO/Importers/Actions/ReadVolumeData.hpp"
 #include "IO/Importers/ElementDataReader.hpp"
@@ -96,21 +98,21 @@ class NumericInitialData : public evolution::initial_data::InitialData {
         "ADM variables: 'Lapse', 'Shift', 'SpatialMetric' and "
         "'ExtrinsicCurvature'. The initial GH variables will be computed "
         "from these numeric fields, as well as their numeric spatial "
-        "derivatives on the computational grid.";
+        "derivatives on the computational grid. The GH variable Pi will be set "
+        "to satisfy the gauge constraint using the evolution gauge. The GH "
+        "variable Phi will be set to satisfy the 3-index constraint.";
     using options = tags_list;
     using TaggedTuple::TaggedTuple;
   };
 
   // - Generalized harmonic variables
   using gh_vars = tmpl::list<gr::Tags::SpacetimeMetric<DataVector, 3>,
-                             Tags::Pi<DataVector, 3>>;
+                             Tags::Pi<DataVector, 3>, Tags::Phi<DataVector, 3>>;
   struct GhVars
       : tuples::tagged_tuple_from_typelist<db::wrap_tags_in<VarName, gh_vars>> {
     static constexpr Options::String help =
-        "GH variables: 'SpacetimeMetric' and 'Pi'. These variables are "
-        "used to set the initial data directly; Phi is then set to the "
-        "numerical derivative of SpacetimeMetric, to enforce the 3-index "
-        "constraint.";
+        "GH variables: 'SpacetimeMetric', 'Pi', and 'Phi'. These variables are "
+        "used to set the initial data directly.";
     using options = tags_list;
     using TaggedTuple::TaggedTuple;
   };
@@ -232,8 +234,7 @@ class NumericInitialData : public evolution::initial_data::InitialData {
       *spacetime_metric = std::move(
           get<gr::Tags::SpacetimeMetric<DataVector, 3>>(*numeric_data));
       *pi = std::move(get<Tags::Pi<DataVector, 3>>(*numeric_data));
-      // Set Phi to the numerical spatial derivative of spacetime_metric
-      partial_derivative(phi, *spacetime_metric, mesh, inv_jacobian);
+      *phi = get<Tags::Phi<DataVector, 3>>(*numeric_data);
     } else if (std::holds_alternative<NumericInitialData::AdmVars>(
                    selected_variables_)) {
       // We have loaded ADM variables from the file. Convert to GH variables.
@@ -288,7 +289,7 @@ struct SetInitialData {
       db::DataBox<DbTagsList>& box,
       const tuples::TaggedTuple<InboxTags...>& /*inboxes*/,
       Parallel::GlobalCache<Metavariables>& cache,
-      const ArrayIndex& /*array_index*/, const ActionList /*meta*/,
+      const ArrayIndex& array_index, const ActionList /*meta*/,
       const ParallelComponent* const parallel_component) {
     // Dispatch to the correct `apply` overload based on type of initial data
     using initial_data_classes =
@@ -297,21 +298,33 @@ struct SetInitialData {
     return call_with_dynamic_type<Parallel::iterable_action_return_t,
                                   initial_data_classes>(
         &db::get<evolution::initial_data::Tags::InitialData>(box),
-        [&box, &cache, &parallel_component](const auto* const initial_data) {
-          return apply(make_not_null(&box), *initial_data, cache,
+        [&box, &cache, &array_index,
+         &parallel_component](const auto* const initial_data) {
+          return apply(make_not_null(&box), *initial_data, cache, array_index,
                        parallel_component);
         });
   }
 
  private:
   // Numeric initial data
-  template <typename DbTagsList, typename Metavariables,
+  template <typename DbTagsList, typename Metavariables, typename ArrayIndex,
             typename ParallelComponent>
   static Parallel::iterable_action_return_t apply(
       const gsl::not_null<db::DataBox<DbTagsList>*> /*box*/,
       const NumericInitialData& initial_data,
       Parallel::GlobalCache<Metavariables>& cache,
-      const ParallelComponent* const /*meta*/) {
+      const ArrayIndex& array_index, const ParallelComponent* const /*meta*/) {
+    // If we are using GH Numeric ID, then we don't have to set Pi and Phi since
+    // we are reading them in. Also we only need to mutate this tag once so do
+    // it on the first element.
+    if (is_zeroth_element(array_index) and
+        std::holds_alternative<NumericInitialData::GhVars>(
+            initial_data.selected_variables())) {
+      Parallel::mutate<Tags::SetPiAndPhiFromConstraints,
+                       gh::gauges::SetPiAndPhiFromConstraintsCacheMutator>(
+          cache, false);
+    }
+
     // Select the subset of the available variables that we want to read from
     // the volume data file
     tuples::tagged_tuple_from_typelist<db::wrap_tags_in<
@@ -332,11 +345,12 @@ struct SetInitialData {
 
   // "AnalyticData"-type initial data
   template <typename DbTagsList, typename InitialData, typename Metavariables,
-            typename ParallelComponent>
+            typename ArrayIndex, typename ParallelComponent>
   static Parallel::iterable_action_return_t apply(
       const gsl::not_null<db::DataBox<DbTagsList>*> box,
       const InitialData& initial_data,
       Parallel::GlobalCache<Metavariables>& /*cache*/,
+      const ArrayIndex& /*array_index*/,
       const ParallelComponent* const /*meta*/) {
     static constexpr size_t Dim = Metavariables::volume_dim;
 

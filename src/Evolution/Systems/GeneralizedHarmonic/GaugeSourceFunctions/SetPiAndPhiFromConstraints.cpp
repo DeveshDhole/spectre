@@ -33,6 +33,11 @@
 #include "Utilities/GenerateInstantiations.hpp"
 
 namespace gh::gauges {
+void SetPiAndPhiFromConstraintsCacheMutator::apply(
+    const gsl::not_null<bool*> value, const bool new_value) {
+  *value = new_value;
+}
+
 template <size_t Dim>
 void SetPiAndPhiFromConstraints<Dim>::apply(
     const gsl::not_null<tnsr::aa<DataVector, Dim, Frame::Inertial>*> pi,
@@ -46,7 +51,11 @@ void SetPiAndPhiFromConstraints<Dim>::apply(
         functions_of_time,
     const tnsr::I<DataVector, Dim, Frame::ElementLogical>& logical_coordinates,
     const tnsr::aa<DataVector, Dim, Frame::Inertial>& spacetime_metric,
-    const gauges::GaugeCondition& gauge_condition) {
+    const gauges::GaugeCondition& gauge_condition,
+    const bool set_pi_and_phi_from_constraints) {
+  if (not set_pi_and_phi_from_constraints) {
+    return;
+  }
   const auto grid_coords = logical_to_grid_map(logical_coordinates);
   const auto inv_jac_logical_to_grid =
       logical_to_grid_map.inv_jacobian(logical_coordinates);

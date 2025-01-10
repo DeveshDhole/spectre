@@ -9,6 +9,7 @@
 #include "DataStructures/DataBox/DataBox.hpp"
 #include "Parallel/AlgorithmExecution.hpp"
 #include "Utilities/TMPL.hpp"
+#include "Utilities/TypeTraits/CreateGetTypeAliasOrDefault.hpp"
 
 /// \cond
 namespace tuples {
@@ -23,6 +24,12 @@ class GlobalCache;
 /// \endcond
 
 namespace Actions {
+namespace detail {
+CREATE_GET_TYPE_ALIAS_OR_DEFAULT(simple_tags)
+CREATE_GET_TYPE_ALIAS_OR_DEFAULT(compute_tags)
+CREATE_GET_TYPE_ALIAS_OR_DEFAULT(const_global_cache_tags)
+CREATE_GET_TYPE_ALIAS_OR_DEFAULT(mutable_global_cache_tags)
+}  // namespace detail
 /*!
  * \ingroup ActionsGroup
  * \brief Apply the function `Mutator::apply` to the DataBox
@@ -40,6 +47,15 @@ namespace Actions {
  */
 template <typename Mutator>
 struct MutateApply {
+  using simple_tags =
+      detail::get_simple_tags_or_default_t<Mutator, tmpl::list<>>;
+  using compute_tags =
+      detail::get_compute_tags_or_default_t<Mutator, tmpl::list<>>;
+  using const_global_cache_tags =
+      detail::get_const_global_cache_tags_or_default_t<Mutator, tmpl::list<>>;
+  using mutable_global_cache_tags =
+      detail::get_mutable_global_cache_tags_or_default_t<Mutator, tmpl::list<>>;
+
   template <typename DataBox, typename... InboxTags, typename Metavariables,
             typename ArrayIndex, typename ActionList,
             typename ParallelComponent>

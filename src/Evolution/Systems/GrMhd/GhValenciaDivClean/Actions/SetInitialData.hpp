@@ -20,6 +20,7 @@
 #include "Evolution/DgSubcell/Tags/Mesh.hpp"
 #include "Evolution/NumericInitialData.hpp"
 #include "Evolution/Systems/GeneralizedHarmonic/Actions/SetInitialData.hpp"
+#include "Evolution/Systems/GeneralizedHarmonic/GaugeSourceFunctions/SetPiAndPhiFromConstraints.hpp"
 #include "Evolution/Systems/GeneralizedHarmonic/Tags.hpp"
 #include "Evolution/Systems/GrMhd/ValenciaDivClean/Actions/NumericInitialData.hpp"
 #include "IO/Importers/Actions/ReadVolumeData.hpp"
@@ -186,7 +187,7 @@ struct SetInitialData {
       db::DataBox<DbTagsList>& box,
       const tuples::TaggedTuple<InboxTags...>& /*inboxes*/,
       Parallel::GlobalCache<Metavariables>& cache,
-      const ArrayIndex& /*array_index*/, const ActionList /*meta*/,
+      const ArrayIndex& array_index, const ActionList /*meta*/,
       const ParallelComponent* const parallel_component) {
     // Dispatch to the correct `apply` overload based on type of initial data
     using initial_data_classes =
@@ -195,8 +196,9 @@ struct SetInitialData {
     return call_with_dynamic_type<Parallel::iterable_action_return_t,
                                   initial_data_classes>(
         &db::get<evolution::initial_data::Tags::InitialData>(box),
-        [&box, &cache, &parallel_component](const auto* const initial_data) {
-          return apply(make_not_null(&box), *initial_data, cache,
+        [&box, &cache, &array_index,
+         &parallel_component](const auto* const initial_data) {
+          return apply(make_not_null(&box), *initial_data, cache, array_index,
                        parallel_component);
         });
   }
@@ -205,13 +207,23 @@ struct SetInitialData {
   static constexpr size_t Dim = 3;
 
   // Numeric initial data
-  template <typename DbTagsList, typename Metavariables,
+  template <typename DbTagsList, typename Metavariables, typename ArrayIndex,
             typename ParallelComponent>
   static Parallel::iterable_action_return_t apply(
       const gsl::not_null<db::DataBox<DbTagsList>*> /*box*/,
       const NumericInitialData& initial_data,
       Parallel::GlobalCache<Metavariables>& cache,
-      const ParallelComponent* const /*meta*/) {
+      const ArrayIndex& array_index, const ParallelComponent* const /*meta*/) {
+    // If we are using GH Numeric ID, then we don't have to set Pi and Phi since
+    // we are reading them in. Also we only need to mutate this tag once so do
+    // it on the first element.
+    if (is_zeroth_element(array_index) and
+        std::holds_alternative<gh::NumericInitialData::GhVars>(
+            initial_data.gh_numeric_id().selected_variables())) {
+      Parallel::mutate<gh::Tags::SetPiAndPhiFromConstraints,
+                       gh::gauges::SetPiAndPhiFromConstraintsCacheMutator>(
+          cache, false);
+    }
     // Select the subset of the available variables that we want to read from
     // the volume data file
     tuples::tagged_tuple_from_typelist<db::wrap_tags_in<
@@ -232,11 +244,12 @@ struct SetInitialData {
 
   // "AnalyticData"-type initial data
   template <typename DbTagsList, typename InitialData, typename Metavariables,
-            typename ParallelComponent>
+            typename ArrayIndex, typename ParallelComponent>
   static Parallel::iterable_action_return_t apply(
       const gsl::not_null<db::DataBox<DbTagsList>*> box,
       const InitialData& initial_data,
       Parallel::GlobalCache<Metavariables>& /*cache*/,
+      const ArrayIndex& /*array_index*/,
       const ParallelComponent* const /*meta*/) {
     // Get ADM + hydro variables from analytic data / solution
     const auto& [coords, mesh, inv_jacobian] = [&box]() {
