@@ -134,6 +134,7 @@ class TestInitialData(unittest.TestCase):
                     "-d",
                     str(self.test_dir / "Pipeline"),
                     "--evolve",
+                    "--eccentricity-control",
                     "--no-submit",
                 ]
             )
@@ -141,7 +142,7 @@ class TestInitialData(unittest.TestCase):
             self.assertEqual(e.code, 0)
         with open(
             self.test_dir
-            / "Pipeline/001_InitialData/ControlParams_000/InitialData.yaml",
+            / "Pipeline/000_InitialData/ControlParams_000/InitialData.yaml",
             "r",
         ) as open_input_file:
             metadata = next(yaml.safe_load_all(open_input_file))
@@ -165,6 +166,7 @@ class TestInitialData(unittest.TestCase):
                         "linear_momentum": [0.0, 0.0, 0.0],
                     },
                     "evolve": True,
+                    "eccentricity_control": True,
                     "scheduler": "None",
                     "copy_executable": "None",
                     "submit_script_template": "None",

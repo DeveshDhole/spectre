@@ -12,6 +12,7 @@ from rich.pretty import pretty_repr
 from spectre.Pipelines.EccentricityControl.InitialOrbitalParameters import (
     initial_orbital_parameters,
 )
+from spectre.support.DirectoryStructure import PipelineStep, list_pipeline_steps
 from spectre.support.Schedule import schedule, scheduler_options
 
 logger = logging.getLogger(__name__)
@@ -125,6 +126,7 @@ def generate_id(
     id_input_file_template: Union[str, Path] = ID_INPUT_FILE_TEMPLATE,
     control: bool = False,
     evolve: bool = False,
+    eccentricity_control: bool = False,
     pipeline_dir: Optional[Union[str, Path]] = None,
     run_dir: Optional[Union[str, Path]] = None,
     segments_dir: Optional[Union[str, Path]] = None,
@@ -165,11 +167,15 @@ def generate_id(
         values. If set to False, the horizon masses and spins in the generated
         data will differ from the input parameters. (default: False)
       evolve: Set to True to evolve the initial data after generation.
+      eccentricity_control: If set to True, an eccentricity reduction script is
+        run on the initial data to correct the initial orbital parameters.
       pipeline_dir: Directory where steps in the pipeline are created. Required
         when 'evolve' is set to True. The initial data will be created in a
         subdirectory '001_InitialData'.
       run_dir: Directory where the initial data is generated. Mutually exclusive
         with 'pipeline_dir'.
+      segments_dir: Directory where the evolution data is generated. Mutually
+        exclusive with 'pipeline_dir' and 'run_dir'.
       out_file_name: Optional. Name of the log file. (Default: "spectre.out")
     """
     logger.warning(
@@ -196,8 +202,16 @@ def generate_id(
             " evolution, etc will be created in the 'pipeline_dir'"
             " automatically."
         )
+    # If there is a pipeline directory, set run directory as well
     if pipeline_dir and not run_dir:
-        run_dir = pipeline_dir / "001_InitialData"
+        pipeline_steps = list_pipeline_steps(pipeline_dir)
+        if pipeline_steps:  # Check if the list is not empty
+            run_dir = pipeline_steps[-1].next(label="InitialData").path
+        else:
+            run_dir = PipelineStep.first(
+                directory=pipeline_dir, label="InitialData"
+            ).path
+    # If we run a control loop, then run initial data in a subdirectory
     if control:
         run_dir = f"{run_dir}/ControlParams_000"
         out_file_name = f"../{out_file_name}"
@@ -225,6 +239,7 @@ def generate_id(
         **scheduler_kwargs,
         control=control,
         evolve=evolve,
+        eccentricity_control=eccentricity_control,
         pipeline_dir=pipeline_dir,
         run_dir=run_dir,
         segments_dir=segments_dir,
@@ -359,6 +374,14 @@ def generate_id(
         "Evolve the initial data after generation. When this flag"
         "is specified, you must also specify a pipeline directory (-d),"
         "instead of a run directory (-o)."
+    ),
+)
+@click.option(
+    "--eccentricity-control",
+    is_flag=True,
+    help=(
+        "Perform eccentricity reduction script that finds current eccentricity"
+        "and better guesses for the input orbital parameters."
     ),
 )
 @click.option(

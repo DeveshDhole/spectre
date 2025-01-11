@@ -28,6 +28,7 @@ Next:
       center_of_mass: [0., 0., 0.]
       linear_momentum: [0., 0., 0.]
     evolve: {{ evolve }}
+    eccentricity_control: {{ eccentricity_control }}
     scheduler: {{ scheduler | default("None") }}
     copy_executable: {{ copy_executable | default("None") }}
     submit_script_template: {{ submit_script_template | default("None") }}

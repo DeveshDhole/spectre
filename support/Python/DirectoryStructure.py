@@ -91,9 +91,9 @@ class Segment:
     NUM_DIGITS = 4
 
     @classmethod
-    def first(cls, directory: Path) -> "Segment":
+    def first(cls, directory: Union[str, Path]) -> "Segment":
         name = "Segment_" + "0" * cls.NUM_DIGITS
-        return Segment(path=directory / name, id=0)
+        return Segment(path=Path(directory) / name, id=0)
 
     @property
     def next(self) -> "Segment":
@@ -125,4 +125,77 @@ def list_segments(segments_dir: Union[str, Path]) -> List[Segment]:
     if not segments_dir.exists():
         return []
     matches = map(Segment.match, segments_dir.iterdir())
+    return sorted(match for match in matches if match)
+
+
+@dataclass(frozen=True, order=True)
+class PipelineStep:
+    """A step in a pipeline
+
+    Each pipeline step is a numbered directory with a label, e.g.
+    "000_InitialData".
+    It can contain a simulation or a pre- or post-processing step
+    such as archiving.
+    Here is an example for the directory structure:
+
+    ```
+    BASE_DIR/
+        000_InitialData/
+            InputFile.yaml
+            Submit.sh
+            ...
+        001_Inspiral/
+            Segment_0000/
+                InputFile.yaml
+                Submit.sh
+                ...
+            Segment_0001/
+                ...
+        002_InitialData/
+            ...
+        ...
+    ```
+
+    Note: "InitialData" and "Inspiral" are examples, any name can be used.
+    """
+
+    path: Path
+    id: int
+    label: str
+
+    NAME_PATTERN = re.compile(r"(\d+)_(.+)")
+    NUM_DIGITS = 3
+
+    @classmethod
+    def first(cls, directory: Union[str, Path], label: str) -> "PipelineStep":
+        """Create the first directory in a sequence"""
+        name = "0" * cls.NUM_DIGITS + "_" + label
+        return PipelineStep(path=Path(directory) / name, id=0, label=label)
+
+    def next(self, label: str) -> "PipelineStep":
+        """Get the next directory in the sequence"""
+        next_id = self.id + 1
+        next_name = f"{str(next_id).zfill(self.NUM_DIGITS)}_{label}"
+        return PipelineStep(
+            path=self.path.resolve().parent / next_name,
+            id=next_id,
+            label=label,
+        )
+
+    @classmethod
+    def match(cls, path: Union[str, Path]) -> Optional["PipelineStep"]:
+        """Checks if the 'path' is a step in the pipeline"""
+        path = Path(path)
+        match = re.match(cls.NAME_PATTERN, path.resolve().name)
+        if not match:
+            return None
+        return cls(path=path, id=int(match.group(1)), label=match.group(2))
+
+
+def list_pipeline_steps(base_dir: Union[str, Path]) -> List[PipelineStep]:
+    """List all subdirectories in the base directory"""
+    base_dir = Path(base_dir)
+    if not base_dir.exists():
+        return []
+    matches = map(PipelineStep.match, base_dir.iterdir())
     return sorted(match for match in matches if match)
