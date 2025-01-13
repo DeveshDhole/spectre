@@ -72,6 +72,7 @@ struct PhaseChangeAndTriggers : db::SimpleTag {
   using type = std::vector<TriggerAndPhaseChanges>;
 
   using option_tags = tmpl::list<OptionTags::PhaseChangeAndTriggers>;
+  static constexpr bool is_overlayable = true;
   static constexpr bool pass_metavariables = false;
   static type create_from_options(const type& phase_control_and_triggers) {
     return deserialize<type>(
