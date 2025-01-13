@@ -210,9 +210,15 @@ class EvolutionStatus(ExecutableStatus):
         import plotly.express as px
         import streamlit as st
 
-        observe_time_event = find_event(
-            "ObserveTimeStep", "EventsAndTriggers", input_file
-        )
+        try:
+            observe_time_event = find_event(
+                "ObserveTimeStep", "EventsAndTriggersAtSlabs", input_file
+            )
+        except KeyError:
+            # Fallback to old name for events and triggers
+            observe_time_event = find_event(
+                "ObserveTimeStep", "EventsAndTriggers", input_file
+            )
         if observe_time_event is None:
             st.warning("No 'ObserveTimeStep' event found in input file.")
             return
