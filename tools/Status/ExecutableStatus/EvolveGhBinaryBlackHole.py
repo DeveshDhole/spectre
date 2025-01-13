@@ -98,7 +98,7 @@ class EvolveGhBinaryBlackHole(EvolutionStatus):
             return f"{value:.2e}"
         return super().format(field, value)
 
-    def render_dashboard(self, job: dict, input_file: dict):
+    def render_dashboard(self, job: dict, input_file: dict, metadata: dict):
         import matplotlib.pyplot as plt
         import plotly.express as px
         import streamlit as st

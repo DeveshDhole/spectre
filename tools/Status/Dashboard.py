@@ -121,7 +121,7 @@ def _render_page(job):
         # Render status metrics
         executable_status = match_executable_status(job["ExecutableName"])
         with open(job["InputFile"], "r") as open_input_file:
-            _, input_file = yaml.safe_load_all(open_input_file)
+            metadata, input_file = yaml.safe_load_all(open_input_file)
         status = executable_status.status(input_file, job["WorkDir"])
         for (field, unit), col in zip(
             executable_status.fields.items(),
@@ -137,7 +137,7 @@ def _render_page(job):
             )
 
         # Executable-specific dashboard
-        executable_status.render_dashboard(job, input_file)
+        executable_status.render_dashboard(job, input_file, metadata)
 
 
 # Fetch the job data

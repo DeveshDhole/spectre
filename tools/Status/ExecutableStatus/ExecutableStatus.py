@@ -80,7 +80,7 @@ class ExecutableStatus:
         """
         raise NotImplementedError
 
-    def render_dashboard(self, job: dict, input_file: dict):
+    def render_dashboard(self, job: dict, input_file: dict, metadata: dict):
         """Render a dashboard for the job (experimental).
 
         Arguments:
@@ -88,6 +88,7 @@ class ExecutableStatus:
             working directory. See the 'spectre.tools.Status.fetch_status'
             function for details.
           input_file: The input file read in as a dictionary.
+          metadata: The input file metadata read in as a dictionary.
 
         This method can be overridden by subclasses to provide a custom
         dashboard for the job. The default implementation does nothing.
@@ -140,9 +141,15 @@ class EvolutionStatus(ExecutableStatus):
         assert (
             avg_num_slabs >= 2
         ), "Need at least 'avg_num_slabs >= 2' to estimate simulation speed."
-        observe_time_event = find_event(
-            "ObserveTimeStep", "EventsAndTriggers", input_file
-        )
+        try:
+            observe_time_event = find_event(
+                "ObserveTimeStep", "EventsAndTriggersAtSlabs", input_file
+            )
+        except KeyError:
+            # Fallback to old name for events and triggers
+            observe_time_event = find_event(
+                "ObserveTimeStep", "EventsAndTriggers", input_file
+            )
         if observe_time_event is None:
             return {}
         subfile_name = observe_time_event["SubfileName"] + ".dat"
@@ -274,7 +281,7 @@ class EvolutionStatus(ExecutableStatus):
         )
         st.plotly_chart(fig)
 
-    def render_dashboard(self, job: dict, input_file: dict):
+    def render_dashboard(self, job: dict, input_file: dict, metadata: dict):
         return self.render_time_steps(
             input_file, list_reduction_files(job, input_file)
         )
@@ -364,5 +371,5 @@ class EllipticStatus(ExecutableStatus):
         )
         st.pyplot(fig)
 
-    def render_dashboard(self, job: dict, input_file: dict):
+    def render_dashboard(self, job: dict, input_file: dict, metadata: dict):
         return self.render_solver_convergence(job, input_file)
