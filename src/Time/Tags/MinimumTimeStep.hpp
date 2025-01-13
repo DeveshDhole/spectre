@@ -14,6 +14,7 @@ namespace Tags {
 struct MinimumTimeStep : db::SimpleTag {
   using type = double;
   using option_tags = tmpl::list<::OptionTags::MinimumTimeStep>;
+  static constexpr bool is_overlayable = true;
 
   static constexpr bool pass_metavariables = false;
   static type create_from_options(const type option) { return option; }
