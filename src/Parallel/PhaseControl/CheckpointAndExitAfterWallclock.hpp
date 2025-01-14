@@ -3,6 +3,7 @@
 
 #pragma once
 
+#include <limits>
 #include <optional>
 #include <pup.h>
 #include <string>
@@ -107,6 +108,13 @@ struct CheckpointAndExitRequested {
  * the executable to clean up. In this case, triggering a global sync every
  * 2-10 minutes might be desirable. Matching the global sync frequency with the
  * time window for checkpoint and exit is the responsibility of the user!
+ *
+ * \parblock
+ * \warning If modifying the phase-change logic on a
+ * checkpoint-restart, this PhaseChange must remain in the list after
+ * modification so that the end of the restart logic will run.  The
+ * WallclockHours can be changed to None to disable further restarts.
+ * \endparblock
  */
 struct CheckpointAndExitAfterWallclock : public PhaseChange {
   CheckpointAndExitAfterWallclock(const std::optional<double> wallclock_hours,
@@ -201,11 +209,6 @@ CheckpointAndExitAfterWallclock::arbitrate_phase_change_impl(
         phase_change_decision_data,
     const Parallel::Phase current_phase,
     const Parallel::GlobalCache<Metavariables>& /*cache*/) const {
-  // If no checkpoint-and-exit time given, then do nothing
-  if (not wallclock_hours_for_checkpoint_and_exit_.has_value()) {
-    return std::nullopt;
-  }
-
   const double elapsed_hours = sys::wall_time() / 3600.0;
 
   auto& restart_phase =
@@ -250,8 +253,8 @@ CheckpointAndExitAfterWallclock::arbitrate_phase_change_impl(
           *phase_change_decision_data);
   if (checkpoint_and_exit_requested) {
     checkpoint_and_exit_requested = false;
-    // We checked wallclock_hours_for_checkpoint_and_exit_ has value above
-    if (elapsed_hours >= wallclock_hours_for_checkpoint_and_exit_.value()) {
+    if (elapsed_hours >= wallclock_hours_for_checkpoint_and_exit_.value_or(
+                             std::numeric_limits<double>::infinity())) {
       // Record phase and actual elapsed time for determining following phase
       restart_phase = current_phase;
       wallclock_hours_at_checkpoint = elapsed_hours;
