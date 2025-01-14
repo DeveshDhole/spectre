@@ -4,7 +4,9 @@
 Executable: EvolveScalarWave2D
 Testing:
   Check: parse;execute
+ExpectedExitCode: 2 0
 ExpectedOutput:
+  - Checkpoints/Checkpoint_0000
   - ScalarWavePlaneWave2DReductions.h5
 
 ---
@@ -38,6 +40,13 @@ Amr:
   Verbosity: Verbose
 
 PhaseChangeAndTriggers:
+  - Trigger:
+      SlabCompares:
+        Comparison: GreaterThan
+        Value: 0
+    PhaseChanges:
+      - CheckpointAndExitAfterWallclock:
+          WallclockHours: 0.0
 
 Evolution:
   InitialTime: &initial_time 0.0
@@ -75,12 +84,13 @@ Filtering:
     BlocksToFilter: All
 
 EventsAndTriggersAtSlabs:
-  - Trigger:
-      Slabs:
-        Specified:
-          Values: [3]
-    Events:
-      - Completion
+  # Added on restart by option overlay
+  # - Trigger:
+  #     SlabCompares:
+  #       Comparison: GreaterThanOrEqualTo
+  #       Value: 3
+  #   Events:
+  #     - Completion
 
 EventsAndDenseTriggers:
   # Test LTS dense output at the initial time

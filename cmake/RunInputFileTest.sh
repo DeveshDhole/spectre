@@ -7,7 +7,7 @@
 # - $1: executable name
 # - $2: path to input file
 # - $3: directory name
-# - $4: expected exit code
+# - $4: space-separated list of expected exit codes
 # - $5: "true" to check output files or "false" to skip the check
 # - $6: additional command-line arguments forwarded to the executable
 
@@ -18,11 +18,26 @@ mkdir -p $test_dir
 cd $test_dir
 
 # Run the executable
-@SPECTRE_TEST_RUNNER@ @CMAKE_BINARY_DIR@/bin/$1 --input-file $2 ${6}
-exit_code=$?
-if [ $exit_code -ne $4 ]; then
-    exit 1
-fi
+restart=
+for expected_code in $4 ; do
+    if [ -z "$restart" ] ; then
+        @SPECTRE_TEST_RUNNER@ @CMAKE_BINARY_DIR@/bin/$1 --input-file $2 ${6}
+        exit_code=$?
+        restart=0
+    else
+        if [ $exit_code -ne 2 ] ; then
+            echo "Must restart after exit code 2" >&2
+            exit 1
+        fi
+        @SPECTRE_TEST_RUNNER@ @CMAKE_BINARY_DIR@/bin/$1 \
+            +restart Checkpoints/Checkpoint_$(printf %04d $restart)
+        exit_code=$?
+        restart=$(expr $restart + 1)
+    fi
+    if [ $exit_code -ne $expected_code ]; then
+        exit 1
+    fi
+done
 
 # Check output and clean up
 if [ "$5" = "true" ]; then

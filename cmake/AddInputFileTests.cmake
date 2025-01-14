@@ -122,6 +122,9 @@ function(add_input_file_tests INPUT_FILE_DIR INPUT_FILE_WHITELIST)
     if (${INPUT_FILE} IN_LIST INPUT_FILE_WHITELIST)
       continue()
     endif()
+    if (INPUT_FILE MATCHES "\\.overlay_[0-9]*\\.yaml$")
+      continue()
+    endif()
 
     file(READ ${INPUT_FILE} INPUT_FILE_CONTENTS)
 

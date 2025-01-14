@@ -1,0 +1,23 @@
+# Distributed under the MIT License.
+# See LICENSE.txt for details.
+
+---
+
+# CheckpointAndExitAfterWallclock must still be in
+# PhaseChangeAndTriggers so that the restart logic will run.
+PhaseChangeAndTriggers:
+  - Trigger:
+      SlabCompares:
+        Comparison: GreaterThan
+        Value: 0
+    PhaseChanges:
+      - CheckpointAndExitAfterWallclock:
+          WallclockHours: None
+
+EventsAndTriggersAtSlabs:
+  - Trigger:
+      SlabCompares:
+        Comparison: GreaterThanOrEqualTo
+        Value: 3
+    Events:
+      - Completion
