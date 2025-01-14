@@ -4,6 +4,7 @@
 #pragma once
 
 #include <memory>
+#include <pup_stl.h>
 #include <vector>
 
 #include "DataStructures/DataBox/Tag.hpp"
