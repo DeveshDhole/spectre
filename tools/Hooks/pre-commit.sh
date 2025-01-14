@@ -33,10 +33,10 @@ printf '%s\0' "${commit_files[@]}" | run_checks "${standard_checks[@]}"
 
 ###############################################################################
 # Use git-clang-format to check for any suspicious formatting of code.
-@CLANG_FORMAT_BIN@ --version > /dev/null
+@GIT_CLANG_FORMAT_BIN@ --help > /dev/null
 if [ $? -eq 0 ]; then
-    clang_format_diff=$(@GIT_EXECUTABLE@ --no-pager \
-        clang-format --binary @CLANG_FORMAT_BIN@ --diff --quiet)
+    clang_format_diff=$(
+        @GIT_CLANG_FORMAT_BIN@ --binary @CLANG_FORMAT_BIN@ --diff --quiet)
     # Clang-format didn't always return the right exit code before version 15,
     # so we check the diff output instead (see issue:
     # https://github.com/llvm/llvm-project/issues/54758)

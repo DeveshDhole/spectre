@@ -38,6 +38,18 @@ if (CLANG_FORMAT_BIN)
     string(REGEX REPLACE "clang-format version " ""
       CLANG_FORMAT_VERSION ${CLANG_FORMAT_VERSION})
   endif()
+
+  # Look for a git-clang-format program in the same place as
+  # clang-format.  Versions of git-clang-format are not always
+  # compatible with other clang-format executables.
+  get_filename_component(CLANG_FORMAT_DIR ${CLANG_FORMAT_BIN} DIRECTORY)
+  get_filename_component(CLANG_FORMAT_NAME ${CLANG_FORMAT_BIN} NAME)
+  find_program(
+    GIT_CLANG_FORMAT_BIN
+    NAMES git-${CLANG_FORMAT_NAME}
+    HINTS ${CLANG_FORMAT_DIR}
+    NO_DEFAULT_PATH
+  )
 endif()
 
 
