@@ -36,6 +36,7 @@ function(add_newtonian_euler_executable DIM)
     ${EXECUTABLE}
     EXCLUDE_FROM_ALL
     EvolveNewtonianEuler.cpp
+    VolumeTermsInstantiation${DIM}D.cpp
     )
   target_compile_definitions(
     ${EXECUTABLE}

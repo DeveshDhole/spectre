@@ -15,6 +15,7 @@
 #include "Utilities/ErrorHandling/Error.hpp"
 #include "Utilities/ErrorHandling/FloatingPointExceptions.hpp"
 #include "Utilities/ErrorHandling/SegfaultHandler.hpp"
+#include "Utilities/Kokkos/KokkosCore.hpp"
 #include "Utilities/MemoryHelpers.hpp"
 
 class TestRunListener : public Catch::EventListenerBase {
@@ -34,6 +35,9 @@ extern "C" void CkRegisterMainModule(void) {}
 #pragma GCC diagnostic pop
 
 int main(int argc, char* argv[]) {
+#ifdef SPECTRE_KOKKOS
+  Kokkos::initialize(argc, argv);
+#endif
   setup_error_handling();
   setup_memory_allocation_failure_reporting();
   Parallel::printf("%s", info_from_build().c_str());
@@ -50,5 +54,8 @@ int main(int argc, char* argv[]) {
   // since there could be multiple tests run in a single executable launch.
   pypp::SetupLocalPythonEnvironment::finalize_env();
 
+#ifdef SPECTRE_KOKKOS
+  Kokkos::finalize();
+#endif
   return result;
 }

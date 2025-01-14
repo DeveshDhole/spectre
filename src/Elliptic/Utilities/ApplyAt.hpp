@@ -166,6 +166,7 @@ SPECTRE_ALWAYS_INLINE void mutate_apply_at(
         return std::forward_as_tuple(expanded_args_items...);
       },
       *box);
+  using argument_tags = tmpl::list<ArgumentTags...>;
   mutate_apply<tmpl::list<ReturnTags...>, tmpl::list<>>(
       [&f, &map_keys, &args_items, &args...](const auto... mutated_items) {
         (void)map_keys;
@@ -177,7 +178,7 @@ SPECTRE_ALWAYS_INLINE void mutate_apply_at(
             std::forward_as_tuple(
                 unmap_arg<tmpl::list_contains_v<PassthroughTags, ArgumentTags>,
                           MapKeys...>::
-                    apply(std::get<tmpl::index_of<tmpl::list<ArgumentTags...>,
+                    apply(std::get<tmpl::index_of<argument_tags,
                                                   ArgumentTags>::value>(
                               args_items),
                           map_keys)...,

@@ -23,6 +23,11 @@ if(SPECTRE_KOKKOS)
     find_package(CUDAToolkit REQUIRED)
     set(Kokkos_ENABLE_CUDA_LAMBDA ON CACHE BOOL
       "Enable lambda expressions in CUDA")
+    # Allow constexpr functions to be called from device code
+    # without the need for a device annotation.
+    # See https://docs.nvidia.com/cuda/cuda-c-programming-guide/index.html#constexpr-functions-and-function-templates
+    set(Kokkos_ENABLE_CUDA_CONSTEXPR ON CACHE BOOL
+      "Enable constexpr in CUDA")
   endif()
 
   find_package(Kokkos)
@@ -42,29 +47,18 @@ if(SPECTRE_KOKKOS)
     )
     FetchContent_MakeAvailable(Kokkos)
   endif()
-
-  if (TARGET Kokkos::kokkos
-      AND Kokkos_ENABLE_CUDA
-      AND CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
-    set_property(TARGET Kokkos::kokkos
-      APPEND PROPERTY
-      INTERFACE_COMPILE_OPTIONS
-      $<$<COMPILE_LANGUAGE:CXX>:
-      -Xcudafe;"--diag_suppress=186,191,554,1301,1305,2189,3060">
-    )
-  endif()
-
-  if (TARGET Kokkos::kokkos
-      AND Kokkos_ENABLE_CUDA
-      AND CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
-    if (${CUDAToolkit_VERSION_MAJOR}.${CUDAToolkit_VERSION_MINOR}
-        VERSION_GREATER 12.0)
-      message(STATUS "CUDA 12.1 is only partially supported by Clang")
-      set_property(TARGET Kokkos::kokkos
-        APPEND PROPERTY
-        INTERFACE_COMPILE_OPTIONS
-        $<$<COMPILE_LANGUAGE:CXX>:-Wno-unknown-cuda-version>
-      )
-    endif()
+else()
+  # We don't have Kokkos enabled, so we fall back to checking manually if the
+  # compiler is NVIDIA's nvcc.
+  execute_process(
+    COMMAND ${CMAKE_CXX_COMPILER} --version
+    OUTPUT_VARIABLE _COMPILER_VERSION
+    OUTPUT_STRIP_TRAILING_WHITESPACE)
+  string(REPLACE "\n" " " _COMPILER_VERSION ${_COMPILER_VERSION})
+  string(FIND ${_COMPILER_VERSION} "nvcc" _COMPILER_IS_NVCC)
+  if(${_COMPILER_IS_NVCC} GREATER -1)
+    set(KOKKOS_CXX_COMPILER_ID "NVIDIA")
+  else()
+    set(KOKKOS_CXX_COMPILER_ID ${CMAKE_CXX_COMPILER_ID})
   endif()
 endif()

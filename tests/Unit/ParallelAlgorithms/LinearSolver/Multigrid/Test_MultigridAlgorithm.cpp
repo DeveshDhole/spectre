@@ -56,7 +56,7 @@ struct Metavariables {
 
   // [setup_smoother]
   using multigrid = LinearSolver::multigrid::Multigrid<
-      Metavariables, helpers_mg::fields_tag, MultigridSolver,
+      Metavariables, volume_dim, helpers_mg::fields_tag, MultigridSolver,
       helpers_mg::OperatorIsMassive, helpers_mg::sources_tag>;
 
   using smoother = LinearSolver::Richardson::Richardson<

@@ -38,7 +38,6 @@ set(LIBRARY_SOURCES
   Test_StaticDeque.cpp
   Test_StripeIterator.cpp
   Test_TaggedContainers.cpp
-  Test_TaggedVariant.cpp
   Test_Tags.cpp
   Test_TempBuffer.cpp
   Test_Transpose.cpp
@@ -46,6 +45,12 @@ set(LIBRARY_SOURCES
   Test_VectorImpl.cpp
   Test_VectorImplTestHelper.cpp
   )
+
+# The following test is disabled for nvcc because nvcc can't handle it
+# (it fails to compile templates, can probably be fixed).
+if(NOT ${KOKKOS_CXX_COMPILER_ID} STREQUAL "NVIDIA")
+  list(APPEND LIBRARY_SOURCES Test_TaggedVariant.cpp)
+endif()
 
 add_subdirectory(DataBox)
 add_subdirectory(Tensor)

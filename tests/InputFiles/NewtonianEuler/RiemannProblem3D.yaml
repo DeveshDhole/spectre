@@ -4,7 +4,6 @@
 Executable: EvolveNewtonianEuler3D
 Testing:
   Check: parse;execute
-  Priority: High
 
 ---
 

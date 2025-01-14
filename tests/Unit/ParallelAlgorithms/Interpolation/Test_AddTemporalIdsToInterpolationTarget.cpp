@@ -9,15 +9,6 @@
 #include <type_traits>
 #include <unordered_set>
 #include <vector>
-#if (defined(__clang__) && __clang_major__ >= 16) || \
-    (defined(__GNUC__) && __GNUC__ >= 11) ||         \
-    (defined(__APPLE__) && defined(__clang__) && __clang_major__ >= 15)
-#include <source_location>
-using std::source_location;
-#else
-#include <experimental/source_location>
-using std::experimental::source_location;
-#endif
 
 #include "ControlSystem/UpdateFunctionOfTime.hpp"
 #include "DataStructures/DataBox/DataBox.hpp"
@@ -447,10 +438,7 @@ void test_add_linked_message_id() {
         make_not_null(&runner), 0, id);
   };
 
-  const auto check_empty = [&]<template <typename> typename Tag>(
-                               const source_location location =
-                                   source_location::current()) {
-    INFO("Line: " + std::to_string(location.line()));
+  const auto check_empty = [&]<template <typename> typename Tag>() {
     if constexpr (tt::is_a_v<std::optional,
                              typename Tag<temporal_id_type>::type>) {
       CHECK(not ActionTesting::get_databox_tag<target_component,
@@ -463,10 +451,7 @@ void test_add_linked_message_id() {
     }
   };
   const auto check_values = [&]<template <typename> typename Tag>(
-                                const std::deque<LinkedMessageId<double>> ids,
-                                const source_location location =
-                                    source_location::current()) {
-    INFO("Line: " + std::to_string(location.line()));
+                                const std::deque<LinkedMessageId<double>> ids) {
     if constexpr (tt::is_a_v<std::deque,
                              typename Tag<temporal_id_type>::type>) {
       CHECK(ActionTesting::get_databox_tag<target_component,

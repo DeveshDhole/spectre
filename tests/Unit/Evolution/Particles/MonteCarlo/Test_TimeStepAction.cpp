@@ -329,9 +329,8 @@ void test_advance_packets() {
   // Run singe time step
   ActionTesting::next_action<comp>(make_not_null(&runner), self_id);
 
-  const auto& packets_from_box =
-      get_databox_tag<comp, Particles::MonteCarlo::Tags::PacketsOnElement>(
-          runner, self_id);
+  const auto& packets_from_box = ActionTesting::get_databox_tag<
+      comp, Particles::MonteCarlo::Tags::PacketsOnElement>(runner, self_id);
   CHECK(packets_from_box[0].time == next_time_step_id.step_time().value());
 }
 

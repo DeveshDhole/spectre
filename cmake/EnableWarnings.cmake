@@ -26,12 +26,6 @@ if(${ENABLE_WARNINGS})
 -Wmissing-include-dirs;\
 -Wmissing-noreturn;\
 -Wnewline-eof;\
--Wno-dangling-reference;\
--Wno-documentation-unknown-command;\
--Wno-mismatched-tags;\
--Wno-non-template-friend;\
--Wno-type-limits;\
--Wno-undefined-var-template;\
 -Wnon-virtual-dtor;\
 -Wold-style-cast;\
 -Woverloaded-virtual;\
@@ -44,18 +38,26 @@ if(${ENABLE_WARNINGS})
 -Wstack-protector;\
 -Wswitch-default;\
 -Wunreachable-code;\
--Wno-gnu-zero-variadic-macro-arguments;\
 -Wwrite-strings" SpectreWarnings)
+else()
+  add_library(SpectreWarnings INTERFACE)
 endif()
 
-# GCC 7.1ish and newer warn about noexcept changing mangled names,
-# but we don't care
-create_cxx_flag_target("-Wno-noexcept-type" SpectreWarnNoNoexceptType)
-
+# Disable some warnings
+create_cxx_flags_target(
+    "-Wno-dangling-reference;\
+-Wno-documentation-unknown-command;\
+-Wno-mismatched-tags;\
+-Wno-non-template-friend;\
+-Wno-type-limits;\
+-Wno-undefined-var-template;\
+-Wno-gnu-zero-variadic-macro-arguments;\
+-Wno-noexcept-type"
+  SpectreDisableSomeWarnings)
 target_link_libraries(
   SpectreWarnings
   INTERFACE
-  SpectreWarnNoNoexceptType
+  SpectreDisableSomeWarnings
   )
 
 # GCC versions below 13 don't respect 'GCC diagnostic' pragmas to disable
@@ -71,6 +73,16 @@ if (CMAKE_CXX_COMPILER_ID STREQUAL "GNU"
     SpectreWarnNoUnknownPragmas
     )
 endif()
+
+# Suppress CUDA warnings that we don't want
+create_cxx_flag_target(
+  "-Xcudafe \"--diag_suppress=177,186,191,554,1301,1305,2189,3060,20012\""
+  SpectreCudaWarnings)
+target_link_libraries(
+  SpectreWarnings
+  INTERFACE
+  SpectreCudaWarnings
+  )
 
 target_link_libraries(
   SpectreFlags

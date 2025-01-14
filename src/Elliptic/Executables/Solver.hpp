@@ -99,13 +99,12 @@ struct MultigridGroup {
  *
  * The elliptic solver stack is described in detail in \cite Vu2021coj.
  *
- * Uses `Metavariables::volume_dim` and `Metavariables::system`. Also uses
- * `Metavariables` to instantiate parallel components.
+ * Uses `Metavariables` to instantiate parallel components.
  */
-template <typename Metavariables>
+template <typename Metavariables, size_t Dim, typename System>
 struct Solver {
-  static constexpr size_t volume_dim = Metavariables::volume_dim;
-  using system = typename Metavariables::system;
+  static constexpr size_t volume_dim = Dim;
+  using system = System;
   static_assert(
       tt::assert_conforms_to_v<system, elliptic::protocols::FirstOrderSystem>);
   static constexpr bool is_linear =
@@ -160,7 +159,7 @@ struct Solver {
 
   /// Precondition each linear solver iteration with a multigrid V-cycle
   using multigrid = LinearSolver::multigrid::Multigrid<
-      Metavariables, typename linear_solver::operand_tag,
+      Metavariables, volume_dim, typename linear_solver::operand_tag,
       OptionTags::MultigridGroup, elliptic::dg::Tags::Massive,
       typename linear_solver::preconditioner_source_tag>;
 
