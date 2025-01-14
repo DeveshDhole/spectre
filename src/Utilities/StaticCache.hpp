@@ -10,6 +10,7 @@
 #include "Utilities/ErrorHandling/Assert.hpp"
 #include "Utilities/Gsl.hpp"
 #include "Utilities/Requires.hpp"
+#include "Utilities/TMPL.hpp"
 #include "Utilities/TypeTraits/IsInteger.hpp"
 
 /// \ingroup UtilitiesGroup
@@ -34,6 +35,8 @@ template <typename EnumerationType, EnumerationType... Enums>
 struct CacheEnumeration {
   constexpr static size_t size = sizeof...(Enums);
   using value_type = EnumerationType;
+  static constexpr std::array<value_type, size> values{Enums...};
+  using value_list = tmpl::integral_list<EnumerationType, Enums...>;
 };
 
 /// \ingroup UtilitiesGroup
@@ -79,115 +82,358 @@ class StaticCache {
   const T& operator()(const Args... parameters) const {
     static_assert(sizeof...(parameters) == sizeof...(Ranges),
                   "Number of arguments must match number of ranges.");
-    return unwrap_cache(generate_tuple<Ranges>(parameters)...);
+    return unwrap_cache_combined(generate_tuple<Ranges>(parameters)...);
   }
 
  private:
-  template <typename Range, typename T1,
-            Requires<not std::is_enum<T1>::value> = nullptr>
+  template <typename Range, typename T1>
   auto generate_tuple(const T1 parameter) const {
-    static_assert(
-        tt::is_integer_v<std::remove_cv_t<T1>>,
-        "The parameter passed for a CacheRange must be an integer type.");
-    return std::make_tuple(
-        static_cast<typename Range::value_type>(parameter),
-        std::integral_constant<typename Range::value_type, Range::start>{},
-        std::make_integer_sequence<typename Range::value_type, Range::size>{});
+    if constexpr (std::is_enum<T1>::value) {
+      static_assert(
+          std::is_same<typename Range::value_type, std::remove_cv_t<T1>>::value,
+          "Mismatched enum parameter type and cached type.");
+      size_t array_location = std::numeric_limits<size_t>::max();
+      static const std::array<typename Range::value_type, Range::size> values{
+          Range::values};
+      for (size_t i = 0; i < Range::size; ++i) {
+        if (parameter == gsl::at(values, i)) {
+          array_location = i;
+          break;
+        }
+      }
+      if (UNLIKELY(array_location == std::numeric_limits<size_t>::max())) {
+        ERROR("Uncached enumeration value: " << parameter);
+      }
+      return std::tuple{array_location, typename Range::value_list{}};
+    } else {
+      static_assert(
+          tt::is_integer_v<std::remove_cv_t<T1>>,
+          "The parameter passed for a CacheRange must be an integer type.");
+
+      // Check range here because the nested range checks in the unwrap_cache
+      // function cause significant compile time overhead.
+      if (UNLIKELY(Range::start >
+                       static_cast<decltype(Range::start)>(parameter) or
+                   static_cast<decltype(Range::start)>(parameter) >=
+                       Range::start +
+                           static_cast<decltype(Range::start)>(Range::size))) {
+        ERROR("Index out of range: "
+              << Range::start << " <= " << parameter << " < "
+              << Range::start +
+                     static_cast<decltype(Range::start)>(Range::size));
+      }
+      return std::tuple{
+          // unsigned cast is safe since this is an index into an array
+          static_cast<size_t>(
+              static_cast<typename Range::value_type>(parameter) -
+              Range::start),
+          tmpl::make_sequence<
+              tmpl::integral_constant<typename Range::value_type, Range::start>,
+              Range::size>{}};
+    }
   }
 
-  template <typename Range, typename T1,
-            Requires<std::is_enum<T1>::value> = nullptr>
-  std::tuple<std::remove_cv_t<T1>, Range> generate_tuple(
-      const T1 parameter) const {
-    static_assert(
-        std::is_same<typename Range::value_type, std::remove_cv_t<T1>>::value,
-        "Mismatched enum parameter type and cached type.");
-    return {parameter, Range{}};
-  }
-
+  // Compilation time notes:
+  //
+  // - The separate peeling of different number of arguments is the
+  //   fastest implementation Nils Deppe has found so far.
+  // - The second fastest is using a Cartesian product on the lists of
+  //   possible values, followed by a for_each over that list to set the
+  //   function pointers in the array. Note that having the for_each function
+  //   be marked `constexpr` resulted in a 6x reduction in compilation time
+  //   for clang 17 compared to the not constexpr version, but still 40%
+  //   slower compilation compared to the pattern matching below.
   template <typename... IntegralConstantValues>
-  const T& unwrap_cache() const {
+  const T& unwrap_cache_combined() const {
     static const T cached_object = generator_(IntegralConstantValues::value...);
     return cached_object;
   }
 
-  template <typename... IntegralConstantValues, auto IndexOffset, auto... Is,
-            typename... Args>
-  const T& unwrap_cache(
-      std::tuple<
-          std::remove_cv_t<decltype(IndexOffset)>,
-          std::integral_constant<std::remove_cv_t<decltype(IndexOffset)>,
-                                 IndexOffset>,
-          std::integer_sequence<std::remove_cv_t<decltype(IndexOffset)>, Is...>>
-          parameter0,
-      Args... parameters) const {
-    if (UNLIKELY(IndexOffset > std::get<0>(parameter0) or
-                 std::get<0>(parameter0) >=
-                     IndexOffset +
-                         static_cast<decltype(IndexOffset)>(sizeof...(Is)))) {
-      ERROR("Index out of range: "
-            << IndexOffset << " <= " << std::get<0>(parameter0) << " < "
-            << IndexOffset + static_cast<decltype(IndexOffset)>(sizeof...(Is)));
-    }
-    // note that the act of assigning to the specified function pointer type
-    // fixes the template arguments that need to be inferred.
-    static const std::array<
-        const T& (StaticCache<Generator, T, Ranges...>::*)(Args...) const,
-        sizeof...(Is)>
-        cache{{&StaticCache<Generator, T, Ranges...>::unwrap_cache<
-            IntegralConstantValues...,
-            std::integral_constant<decltype(IndexOffset),
-                                   Is + IndexOffset>>...}};
-    // The array `cache` holds pointers to member functions, so we dereference
-    // the pointer and invoke it on `this`.
 #if defined(__GNUC__) && !defined(__clang__) && __GNUC__ > 10 && __GNUC__ < 14
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Warray-bounds"
 #endif
-    return (this->*gsl::at(cache, std::get<0>(parameter0) - IndexOffset))(
-        parameters...);
-#if defined(__GNUC__) && !defined(__clang__) && __GNUC__ > 10 && __GNUC__ < 14
-#pragma GCC diagnostic pop
-#endif
+  template <typename... IntegralConstantValues, typename... IntegralConstants>
+  const T& unwrap_cache_combined(
+      std::tuple<size_t, tmpl::list<IntegralConstants...>> parameter0) const {
+    // note that the act of assigning to the specified function pointer type
+    // fixes the template arguments that need to be inferred.
+    static const std::array<const T& (StaticCache<Generator, T, Ranges...>::*)()
+                                const,
+                            sizeof...(IntegralConstants)>
+        cache{{&StaticCache<Generator, T, Ranges...>::unwrap_cache_combined<
+            IntegralConstantValues..., IntegralConstants>...}};
+    // The array `cache` holds pointers to member functions, so we dereference
+    // the pointer and invoke it on `this`.
+    return (this->*gsl::at(cache, std::get<0>(parameter0)))();
   }
 
-  template <typename... IntegralConstantValues, typename EnumType,
-            EnumType... EnumValues, typename... Args>
-  const T& unwrap_cache(
-      std::tuple<EnumType, CacheEnumeration<EnumType, EnumValues...>>
-          parameter0,
-      Args... parameters) const {
-    size_t array_location = std::numeric_limits<size_t>::max();
-    static const std::array<EnumType, sizeof...(EnumValues)> values{
-        {EnumValues...}};
-    for (size_t i = 0; i < sizeof...(EnumValues); ++i) {
-      if (std::get<0>(parameter0) == gsl::at(values, i)) {
-        array_location = i;
-        break;
-      }
-    }
-    if (UNLIKELY(array_location == std::numeric_limits<size_t>::max())) {
-      ERROR("Uncached enumeration value: " << std::get<0>(parameter0));
-    }
+  template <typename... IntegralConstantValues, typename... IntegralConstants0,
+            typename... IntegralConstants1>
+  const T& unwrap_cache_combined(
+      std::tuple<size_t, tmpl::list<IntegralConstants0...>> parameter0,
+      std::tuple<size_t, tmpl::list<IntegralConstants1...>> parameter1) const {
+    // note that the act of assigning to the specified function pointer type
+    // fixes the template arguments that need to be inferred.
+    static const std::array<
+        const T& (StaticCache<Generator, T, Ranges...>::*)() const,
+        sizeof...(IntegralConstants0) * sizeof...(IntegralConstants1)>
+        cache = []() {
+          std::array<const T& (StaticCache<Generator, T, Ranges...>::*)() const,
+                     sizeof...(IntegralConstants0) *
+                         sizeof...(IntegralConstants1)>
+              result;
+          size_t counter1 = 0;
+          const auto helper = [&counter1,
+                               &result]<typename IntegralConstant1>() {
+            size_t counter0 = 0;
+            // Note: Left-to-right ordering is guaranteed by the comma
+            //   operator, otherwise we'd need to use another
+            //   EXPAND_PACK_LEFT_TO_RIGHT
+            (((result[counter0 + sizeof...(IntegralConstants0) * counter1] =
+                   &StaticCache<Generator, T, Ranges...>::unwrap_cache_combined<
+                       IntegralConstantValues..., IntegralConstants0,
+                       IntegralConstant1>),
+              ++counter0),
+             ...);
+            ++counter1;
+          };
+          EXPAND_PACK_LEFT_TO_RIGHT(
+              helper.template operator()<IntegralConstants1>());
+          return result;
+        }();
+
+    // The array `cache` holds pointers to member functions, so we dereference
+    // the pointer and invoke it on `this`.
+    return (this->*gsl::at(cache, std::get<0>(parameter0) +
+                                      sizeof...(IntegralConstants0) *
+                                          std::get<0>(parameter1)))();
+  }
+
+  template <typename... IntegralConstantValues, typename... IntegralConstants0,
+            typename... IntegralConstants1, typename... IntegralConstants2>
+  const T& unwrap_cache_combined(
+      std::tuple<size_t, tmpl::list<IntegralConstants0...>> parameter0,
+      std::tuple<size_t, tmpl::list<IntegralConstants1...>> parameter1,
+      std::tuple<size_t, tmpl::list<IntegralConstants2...>> parameter2) const {
+    // note that the act of assigning to the specified function pointer type
+    // fixes the template arguments that need to be inferred.
+    static const std::array<
+        const T& (StaticCache<Generator, T, Ranges...>::*)() const,
+        sizeof...(IntegralConstants0) * sizeof...(IntegralConstants1) *
+            sizeof...(IntegralConstants2)>
+        cache = []() {
+          std::array<const T& (StaticCache<Generator, T, Ranges...>::*)() const,
+                     sizeof...(IntegralConstants0) *
+                         sizeof...(IntegralConstants1) *
+                         sizeof...(IntegralConstants2)>
+              result;
+          size_t counter2 = 0;
+          const auto helper2 = [&counter2,
+                                &result]<typename IntegralConstant2>() {
+            size_t counter1 = 0;
+            const auto helper = [&counter1, &counter2,
+                                 &result]<typename IntegralConstant1>() {
+              size_t counter0 = 0;
+              // Note: Left-to-right ordering is guaranteed by the comma
+              //   operator, otherwise we'd need to use another
+              //   EXPAND_PACK_LEFT_TO_RIGHT
+              (((result[counter0 +
+                        sizeof...(IntegralConstants0) *
+                            (counter1 +
+                             sizeof...(IntegralConstants1) * counter2)] =
+                     &StaticCache<Generator, T, Ranges...>::
+                         unwrap_cache_combined<
+                             IntegralConstantValues..., IntegralConstants0,
+                             IntegralConstant1, IntegralConstant2>),
+                ++counter0),
+               ...);
+              ++counter1;
+            };
+            EXPAND_PACK_LEFT_TO_RIGHT(
+                helper.template operator()<IntegralConstants1>());
+            ++counter2;
+          };
+          EXPAND_PACK_LEFT_TO_RIGHT(
+              helper2.template operator()<IntegralConstants2>());
+          return result;
+        }();
+
+    // The array `cache` holds pointers to member functions, so we dereference
+    // the pointer and invoke it on `this`.
+    return (this->*gsl::at(cache, std::get<0>(parameter0) +
+                                      sizeof...(IntegralConstants0) *
+                                          (std::get<0>(parameter1) +
+                                           sizeof...(IntegralConstants1) *
+                                               std::get<0>(parameter2))))();
+  }
+
+  template <typename... IntegralConstantValues, typename... IntegralConstants0,
+            typename... IntegralConstants1, typename... IntegralConstants2,
+            typename... IntegralConstants3>
+  const T& unwrap_cache_combined(
+      std::tuple<size_t, tmpl::list<IntegralConstants0...>> parameter0,
+      std::tuple<size_t, tmpl::list<IntegralConstants1...>> parameter1,
+      std::tuple<size_t, tmpl::list<IntegralConstants2...>> parameter2,
+      std::tuple<size_t, tmpl::list<IntegralConstants3...>> parameter3) const {
+    // note that the act of assigning to the specified function pointer type
+    // fixes the template arguments that need to be inferred.
+    static const std::array<
+        const T& (StaticCache<Generator, T, Ranges...>::*)() const,
+        sizeof...(IntegralConstants0) * sizeof...(IntegralConstants1) *
+            sizeof...(IntegralConstants2) * sizeof...(IntegralConstants3)>
+        cache = []() {
+          std::array<
+              const T& (StaticCache<Generator, T, Ranges...>::*)() const,
+              sizeof...(IntegralConstants0) * sizeof...(IntegralConstants1) *
+                  sizeof...(IntegralConstants2) * sizeof...(IntegralConstants3)>
+              result;
+          size_t counter3 = 0;
+          const auto helper3 = [&counter3,
+                                &result]<typename IntegralConstant3>() {
+            size_t counter2 = 0;
+            const auto helper2 = [&counter2, &counter3,
+                                  &result]<typename IntegralConstant2>() {
+              size_t counter1 = 0;
+              const auto helper = [&counter1, &counter2, &counter3,
+                                   &result]<typename IntegralConstant1>() {
+                size_t counter0 = 0;
+                // Note: Left-to-right ordering is guaranteed by the comma
+                //   operator, otherwise we'd need to use another
+                //   EXPAND_PACK_LEFT_TO_RIGHT
+                (((result[counter0 +
+                          sizeof...(IntegralConstants0) *
+                              (counter1 +
+                               sizeof...(IntegralConstants1) *
+                                   (counter2 + sizeof...(IntegralConstants2) *
+                                                   counter3))] =
+                       &StaticCache<Generator, T, Ranges...>::
+                           unwrap_cache_combined<
+                               IntegralConstantValues..., IntegralConstants0,
+                               IntegralConstant1, IntegralConstant2,
+                               IntegralConstant3>),
+                  ++counter0),
+                 ...);
+                ++counter1;
+              };
+              EXPAND_PACK_LEFT_TO_RIGHT(
+                  helper.template operator()<IntegralConstants1>());
+              ++counter2;
+            };
+            EXPAND_PACK_LEFT_TO_RIGHT(
+                helper2.template operator()<IntegralConstants2>());
+            ++counter3;
+          };
+          EXPAND_PACK_LEFT_TO_RIGHT(
+              helper3.template operator()<IntegralConstants3>());
+          return result;
+        }();
+
+    // The array `cache` holds pointers to member functions, so we dereference
+    // the pointer and invoke it on `this`.
+    return (
+        this->*gsl::at(cache, std::get<0>(parameter0) +
+                                  sizeof...(IntegralConstants0) *
+                                      (std::get<0>(parameter1) +
+                                       sizeof...(IntegralConstants1) *
+                                           (std::get<0>(parameter2) +
+                                            sizeof...(IntegralConstants2) *
+                                                std::get<0>(parameter3)))))();
+  }
+
+  template <typename... IntegralConstantValues, typename... IntegralConstants0,
+            typename... IntegralConstants1, typename... IntegralConstants2,
+            typename... IntegralConstants3, typename... IntegralConstants4,
+            typename... Args>
+  const T& unwrap_cache_combined(
+      std::tuple<size_t, tmpl::list<IntegralConstants0...>> parameter0,
+      std::tuple<size_t, tmpl::list<IntegralConstants1...>> parameter1,
+      std::tuple<size_t, tmpl::list<IntegralConstants2...>> parameter2,
+      std::tuple<size_t, tmpl::list<IntegralConstants3...>> parameter3,
+      std::tuple<size_t, tmpl::list<IntegralConstants4...>> parameter4,
+      const Args&... parameters) const {
     // note that the act of assigning to the specified function pointer type
     // fixes the template arguments that need to be inferred.
     static const std::array<
         const T& (StaticCache<Generator, T, Ranges...>::*)(Args...) const,
-        sizeof...(EnumValues)>
-        cache{{&StaticCache<Generator, T, Ranges...>::unwrap_cache<
-            IntegralConstantValues...,
-            std::integral_constant<EnumType, EnumValues>>...}};
+        sizeof...(IntegralConstants0) * sizeof...(IntegralConstants1) *
+            sizeof...(IntegralConstants2) * sizeof...(IntegralConstants3) *
+            sizeof...(IntegralConstants3)>
+        cache = []() {
+          std::array<
+              const T& (StaticCache<Generator, T, Ranges...>::*)(Args...) const,
+              sizeof...(IntegralConstants0) * sizeof...(IntegralConstants1) *
+                  sizeof...(IntegralConstants2) *
+                  sizeof...(IntegralConstants3) * sizeof...(IntegralConstants3)>
+              result;
+          size_t counter4 = 0;
+          const auto helper4 = [&counter4,
+                                &result]<typename IntegralConstant4>() {
+            size_t counter3 = 0;
+            const auto helper3 = [&counter3, &counter4,
+                                  &result]<typename IntegralConstant3>() {
+              size_t counter2 = 0;
+              const auto helper2 = [&counter2, &counter3, &counter4,
+                                    &result]<typename IntegralConstant2>() {
+                size_t counter1 = 0;
+                const auto helper = [&counter1, &counter2, &counter3, &counter4,
+                                     &result]<typename IntegralConstant1>() {
+                  size_t counter0 = 0;
+                  // Note: Left-to-right ordering is guaranteed by the comma
+                  //   operator, otherwise we'd need to use another
+                  //   EXPAND_PACK_LEFT_TO_RIGHT
+                  (((result[counter0 +
+                            sizeof...(IntegralConstants0) *
+                                (counter1 +
+                                 sizeof...(IntegralConstants1) *
+                                     (counter2 +
+                                      sizeof...(IntegralConstants2) *
+                                          (counter3 +
+                                           sizeof...(IntegralConstants3) *
+                                               counter4)))] =
+                         &StaticCache<Generator, T, Ranges...>::
+                             unwrap_cache_combined<
+                                 IntegralConstantValues..., IntegralConstants0,
+                                 IntegralConstant1, IntegralConstant2,
+                                 IntegralConstant3, IntegralConstant4>),
+                    ++counter0),
+                   ...);
+                  ++counter1;
+                };
+                EXPAND_PACK_LEFT_TO_RIGHT(
+                    helper.template operator()<IntegralConstants1>());
+                ++counter2;
+              };
+              EXPAND_PACK_LEFT_TO_RIGHT(
+                  helper2.template operator()<IntegralConstants2>());
+              ++counter3;
+            };
+            EXPAND_PACK_LEFT_TO_RIGHT(
+                helper3.template operator()<IntegralConstants3>());
+            ++counter4;
+          };
+          EXPAND_PACK_LEFT_TO_RIGHT(
+              helper4.template operator()<IntegralConstants4>());
+          return result;
+        }();
+
     // The array `cache` holds pointers to member functions, so we dereference
     // the pointer and invoke it on `this`.
-#if defined(__GNUC__) && !defined(__clang__) && __GNUC__ > 10 && __GNUC__ < 14
-#pragma GCC diagnostic push
-#pragma GCC diagnostic ignored "-Warray-bounds"
-#endif
-    return (this->*gsl::at(cache, array_location))(parameters...);
+    return (this->*gsl::at(cache,
+                           std::get<0>(parameter0) +
+                               sizeof...(IntegralConstants0) *
+                                   (std::get<0>(parameter1) +
+                                    sizeof...(IntegralConstants1) *
+                                        (std::get<0>(parameter2) +
+                                         sizeof...(IntegralConstants2) *
+                                             (std::get<0>(parameter3) +
+                                              sizeof...(IntegralConstants3) *
+                                                  std::get<0>(parameter4))))))(
+        parameters...);
+  }
 #if defined(__GNUC__) && !defined(__clang__) && __GNUC__ > 10 && __GNUC__ < 14
 #pragma GCC diagnostic pop
 #endif
-  }
 
   const Generator generator_;
 };

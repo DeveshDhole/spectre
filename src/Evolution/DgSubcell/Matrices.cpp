@@ -37,118 +37,33 @@ const Matrix& projection_matrix(
              subcell_quadrature == Spectral::Quadrature::CellCentered,
          "subcell_quadrature option in projection_matrix should be "
          "FaceCentered or CellCentered");
-  switch (dg_mesh.quadrature(0)) {
-    case Spectral::Quadrature::GaussLobatto: {
-      switch (subcell_quadrature) {
-        case Spectral::Quadrature::CellCentered: {
-          static const auto cache_gl = make_static_cache<
-              CacheRange<Spectral::minimum_number_of_points<
-                             Spectral::Basis::Legendre,
-                             Spectral::Quadrature::GaussLobatto>,
-                         Spectral::maximum_number_of_points<
-                             Spectral::Basis::Legendre> +
-                             1>,
-              CacheRange<Spectral::minimum_number_of_points<
-                             Spectral::Basis::FiniteDifference,
-                             Spectral::Quadrature::CellCentered>,
-                         Spectral::maximum_number_of_points<
-                             Spectral::Basis::FiniteDifference> +
-                             1>>([](const size_t local_num_dg_points,
-                                    const size_t local_num_fd_points) {
-            return Spectral::interpolation_matrix<
-                Spectral::Basis::Legendre, Spectral::Quadrature::GaussLobatto>(
-                local_num_dg_points,
-                Spectral::collocation_points<
-                    Spectral::Basis::FiniteDifference,
-                    Spectral::Quadrature::CellCentered>(local_num_fd_points));
-          });
-          return cache_gl(dg_mesh.extents(0), subcell_extents);
-        }
-        case Spectral::Quadrature::FaceCentered: {
-          static const auto cache_gl = make_static_cache<
-              CacheRange<Spectral::minimum_number_of_points<
-                             Spectral::Basis::Legendre,
-                             Spectral::Quadrature::GaussLobatto>,
-                         Spectral::maximum_number_of_points<
-                             Spectral::Basis::Legendre> +
-                             1>,
-              CacheRange<Spectral::minimum_number_of_points<
-                             Spectral::Basis::FiniteDifference,
-                             Spectral::Quadrature::CellCentered>,
-                         Spectral::maximum_number_of_points<
-                             Spectral::Basis::FiniteDifference> +
-                             1>>([](const size_t local_num_dg_points,
-                                    const size_t local_num_fd_points) {
-            return Spectral::interpolation_matrix<
-                Spectral::Basis::Legendre, Spectral::Quadrature::GaussLobatto>(
-                local_num_dg_points,
-                Spectral::collocation_points<
-                    Spectral::Basis::FiniteDifference,
-                    Spectral::Quadrature::FaceCentered>(local_num_fd_points));
-          });
-          return cache_gl(dg_mesh.extents(0), subcell_extents);
-        }
-        default:
-          ERROR("Unsupported quadrature type in FD subcell projection matrix");
-      }
-    }
-    case Spectral::Quadrature::Gauss: {
-      switch (subcell_quadrature) {
-        case Spectral::Quadrature::CellCentered: {
-          static const auto cache_g = make_static_cache<
-              CacheRange<
-                  Spectral::minimum_number_of_points<
-                      Spectral::Basis::Legendre, Spectral::Quadrature::Gauss>,
-                  Spectral::maximum_number_of_points<
-                      Spectral::Basis::Legendre> +
-                      1>,
-              CacheRange<Spectral::minimum_number_of_points<
-                             Spectral::Basis::FiniteDifference,
-                             Spectral::Quadrature::CellCentered>,
-                         Spectral::maximum_number_of_points<
-                             Spectral::Basis::FiniteDifference> +
-                             1>>([](const size_t local_num_dg_points,
-                                    const size_t local_num_fd_points) {
-            return Spectral::interpolation_matrix<Spectral::Basis::Legendre,
-                                                  Spectral::Quadrature::Gauss>(
-                local_num_dg_points,
-                Spectral::collocation_points<
-                    Spectral::Basis::FiniteDifference,
-                    Spectral::Quadrature::CellCentered>(local_num_fd_points));
-          });
-          return cache_g(dg_mesh.extents(0), subcell_extents);
-        }
-        case Spectral::Quadrature::FaceCentered: {
-          static const auto cache_g = make_static_cache<
-              CacheRange<
-                  Spectral::minimum_number_of_points<
-                      Spectral::Basis::Legendre, Spectral::Quadrature::Gauss>,
-                  Spectral::maximum_number_of_points<
-                      Spectral::Basis::Legendre> +
-                      1>,
-              CacheRange<Spectral::minimum_number_of_points<
-                             Spectral::Basis::FiniteDifference,
-                             Spectral::Quadrature::CellCentered>,
-                         Spectral::maximum_number_of_points<
-                             Spectral::Basis::FiniteDifference> +
-                             1>>([](const size_t local_num_dg_points,
-                                    const size_t local_num_fd_points) {
-            return Spectral::interpolation_matrix<Spectral::Basis::Legendre,
-                                                  Spectral::Quadrature::Gauss>(
-                local_num_dg_points,
-                Spectral::collocation_points<
-                    Spectral::Basis::FiniteDifference,
-                    Spectral::Quadrature::FaceCentered>(local_num_fd_points));
-          });
-          return cache_g(dg_mesh.extents(0), subcell_extents);
-        }
-        default:
-          ERROR("Unsupported quadrature type in FD subcell projection matrix");
-      }
-    }
-    default:
-      ERROR("Unsupported quadrature type in FD subcell projection matrix");
-  };
+  static const auto cache = make_static_cache<
+      CacheRange<
+          Spectral::minimum_number_of_points<
+              Spectral::Basis::Legendre, Spectral::Quadrature::GaussLobatto>,
+          Spectral::maximum_number_of_points<Spectral::Basis::Legendre> + 1>,
+      CacheRange<Spectral::minimum_number_of_points<
+                     Spectral::Basis::FiniteDifference,
+                     Spectral::Quadrature::CellCentered>,
+                 Spectral::maximum_number_of_points<
+                     Spectral::Basis::FiniteDifference> +
+                     1>,
+      CacheEnumeration<Spectral::Quadrature, Spectral::Quadrature::Gauss,
+                       Spectral::Quadrature::GaussLobatto>,
+      CacheEnumeration<Spectral::Quadrature, Spectral::Quadrature::CellCentered,
+                       Spectral::Quadrature::FaceCentered>>(
+      [](const size_t local_num_dg_points, const size_t local_num_fd_points,
+         const Spectral::Quadrature dg_quadrature,
+         const Spectral::Quadrature local_subcell_quadrature) {
+        return Spectral::interpolation_matrix(
+            Mesh<1>{local_num_dg_points, Spectral::Basis::Legendre,
+                    dg_quadrature},
+            Spectral::collocation_points(
+                Mesh<1>{local_num_fd_points, Spectral::Basis::FiniteDifference,
+                        local_subcell_quadrature}));
+      });
+  return cache(dg_mesh.extents(0), subcell_extents, dg_mesh.quadrature(0),
+               subcell_quadrature);
 }
 
 namespace {
@@ -437,9 +352,8 @@ const Matrix& projection_matrix(const Mesh<1>& dg_mesh,
   ASSERT(ghost_zone_size <= max_ghost_zone_size and ghost_zone_size >= 2,
          "ghost_zone_size must be in [2, " << max_ghost_zone_size
                                            << " ] but got " << ghost_zone_size);
-  switch (dg_mesh.quadrature(0)) {
-    case Spectral::Quadrature::GaussLobatto: {
-      static const auto cache_gl = make_static_cache<
+  static const auto cache =
+      make_static_cache<
           CacheRange<
               Spectral::minimum_number_of_points<
                   Spectral::Basis::Legendre,
@@ -453,9 +367,12 @@ const Matrix& projection_matrix(const Mesh<1>& dg_mesh,
                          Spectral::Basis::FiniteDifference> +
                          1>,
           CacheRange<2_st, max_ghost_zone_size + 1>,
+          CacheEnumeration<Spectral::Quadrature, Spectral::Quadrature::Gauss,
+                           Spectral::Quadrature::GaussLobatto>,
           CacheEnumeration<Side, Side::Lower, Side::Upper>>(
           [](const size_t local_num_dg_points, const size_t local_num_fd_points,
-             const size_t local_ghost_zone_size, const Side local_side) {
+             const size_t local_ghost_zone_size,
+             const Spectral::Quadrature dg_quadrature, const Side local_side) {
             const DataVector& fd_points = Spectral::collocation_points<
                 Spectral::Basis::FiniteDifference,
                 Spectral::Quadrature::CellCentered>(local_num_fd_points);
@@ -466,50 +383,13 @@ const Matrix& projection_matrix(const Mesh<1>& dg_mesh,
                                                : (local_num_fd_points -
                                                   local_ghost_zone_size + i)];
             }
-            return Spectral::interpolation_matrix<
-                Spectral::Basis::Legendre, Spectral::Quadrature::GaussLobatto>(
-                local_num_dg_points, target_points);
+            return Spectral::interpolation_matrix(
+                Mesh<1>{local_num_dg_points, Spectral::Basis::Legendre,
+                        dg_quadrature},
+                target_points);
           });
-      return cache_gl(dg_mesh.extents(0), subcell_extents, ghost_zone_size,
-                      side);
-    }
-    case Spectral::Quadrature::Gauss: {
-      static const auto cache_g = make_static_cache<
-          CacheRange<
-              Spectral::minimum_number_of_points<Spectral::Basis::Legendre,
-                                                 Spectral::Quadrature::Gauss>,
-              Spectral::maximum_number_of_points<Spectral::Basis::Legendre> +
-                  1>,
-          CacheRange<Spectral::minimum_number_of_points<
-                         Spectral::Basis::FiniteDifference,
-                         Spectral::Quadrature::CellCentered>,
-                     Spectral::maximum_number_of_points<
-                         Spectral::Basis::FiniteDifference> +
-                         1>,
-          CacheRange<2_st, max_ghost_zone_size + 1>,
-          CacheEnumeration<Side, Side::Lower, Side::Upper>>(
-          [](const size_t local_num_dg_points, const size_t local_num_fd_points,
-             const size_t local_ghost_zone_size, const Side local_side) {
-            const DataVector& fd_points = Spectral::collocation_points<
-                Spectral::Basis::FiniteDifference,
-                Spectral::Quadrature::CellCentered>(local_num_fd_points);
-            DataVector target_points(local_ghost_zone_size);
-            for (size_t i = 0; i < local_ghost_zone_size; ++i) {
-              target_points[i] = fd_points[local_side == Side::Lower
-                                               ? i
-                                               : (local_num_fd_points -
-                                                  local_ghost_zone_size + i)];
-            }
-            return Spectral::interpolation_matrix<Spectral::Basis::Legendre,
-                                                  Spectral::Quadrature::Gauss>(
-                local_num_dg_points, target_points);
-          });
-      return cache_g(dg_mesh.extents(0), subcell_extents, ghost_zone_size,
-                     side);
-    }
-    default:
-      ERROR("Unsupported quadrature type in FD subcell projection matrix");
-  };
+  return cache(dg_mesh.extents(0), subcell_extents, ghost_zone_size,
+               dg_mesh.quadrature(0), side);
 }
 
 #define GET_DIM(data) BOOST_PP_TUPLE_ELEM(0, data)
