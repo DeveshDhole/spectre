@@ -31,34 +31,11 @@
 
 namespace domain::creators::sphere {
 
-TimeDependentMapOptions::RotationMapOptions::RotationMapOptions() = default;
-TimeDependentMapOptions::RotationMapOptions::RotationMapOptions(
-    const std::array<std::array<double, 4>, 3> initial_values_in,
-    const double decay_timescale_in)
-    : initial_values(initial_values_in), decay_timescale(decay_timescale_in) {}
-
-TimeDependentMapOptions::ExpansionMapOptions::ExpansionMapOptions() = default;
-TimeDependentMapOptions::ExpansionMapOptions::ExpansionMapOptions(
-    const std::array<double, 3> initial_values_in,
-    const double decay_timescale_in,
-    const std::array<double, 3> initial_values_outer_boundary_in,
-    const double decay_timescale_outer_boundary_in)
-    : initial_values(initial_values_in),
-      decay_timescale(decay_timescale_in),
-      initial_values_outer_boundary(initial_values_outer_boundary_in),
-      decay_timescale_outer_boundary(decay_timescale_outer_boundary_in) {}
-
-TimeDependentMapOptions::TranslationMapOptions::TranslationMapOptions() =
-    default;
-TimeDependentMapOptions::TranslationMapOptions::TranslationMapOptions(
-    const std::array<std::array<double, 3>, 3> initial_values_in)
-    : initial_values(initial_values_in) {}
-
 TimeDependentMapOptions::TimeDependentMapOptions(
-    const double initial_time, std::optional<ShapeMapOptions> shape_map_options,
-    std::optional<RotationMapOptions> rotation_map_options,
-    std::optional<ExpansionMapOptions> expansion_map_options,
-    std::optional<TranslationMapOptions> translation_map_options,
+    const double initial_time, ShapeMapOptionType shape_map_options,
+    RotationMapOptionType rotation_map_options,
+    ExpansionMapOptionType expansion_map_options,
+    TranslationMapOptionType translation_map_options,
     const bool transition_rot_scale_trans)
     : initial_time_(initial_time),
       shape_map_options_(std::move(shape_map_options)),
@@ -81,6 +58,8 @@ TimeDependentMapOptions::create_functions_of_time(
   std::unordered_map<std::string, double> expiration_times{
       {size_name, std::numeric_limits<double>::infinity()},
       {shape_name, std::numeric_limits<double>::infinity()},
+      {rotation_name, std::numeric_limits<double>::infinity()},
+      {expansion_name, std::numeric_limits<double>::infinity()},
       {translation_name, std::numeric_limits<double>::infinity()}};
 
   // If we have control systems, overwrite these expiration times with the ones
@@ -90,95 +69,35 @@ TimeDependentMapOptions::create_functions_of_time(
   }
 
   if (shape_map_options_.has_value()) {
-    auto [shape_funcs, size_funcs] =
-        time_dependent_options::initial_shape_and_size_funcs(
-            shape_map_options_.value(), deformed_radius_);
-
-    // ShapeMap FunctionOfTime
-    result[shape_name] =
-        std::make_unique<FunctionsOfTime::PiecewisePolynomial<2>>(
-            initial_time_, std::move(shape_funcs),
-            expiration_times.at(shape_name));
-
-    // Size FunctionOfTime (used in ShapeMap)
-    result[size_name] =
-        std::make_unique<FunctionsOfTime::PiecewisePolynomial<3>>(
-            initial_time_, std::move(size_funcs),
-            expiration_times.at(size_name));
+    // ShapeMap and Size FunctionOfTime (used in ShapeMap)
+    auto shape_and_size = time_dependent_options::get_shape_and_size(
+        shape_map_options_.value(), initial_time_,
+        expiration_times.at(shape_name), expiration_times.at(size_name),
+        deformed_radius_);
+    result.merge(shape_and_size);
   }
 
   // ExpansionMap FunctionOfTime
   if (expansion_map_options_.has_value()) {
-    result[expansion_name] =
-        std::make_unique<FunctionsOfTime::SettleToConstant>(
-            std::array<DataVector, 3>{
-                {{gsl::at(expansion_map_options_.value().initial_values, 0)},
-                 {gsl::at(expansion_map_options_.value().initial_values, 1)},
-                 {gsl::at(expansion_map_options_.value().initial_values, 2)}}},
-            initial_time_, expansion_map_options_.value().decay_timescale);
+    auto expansion_functions_of_time = time_dependent_options::get_expansion(
+        expansion_map_options_.value(), initial_time_,
+        expiration_times.at(expansion_name));
 
-    // ExpansionMap in the Outer regionFunctionOfTime
-    result[expansion_outer_boundary_name] = std::make_unique<
-        FunctionsOfTime::SettleToConstant>(
-        std::array<DataVector, 3>{
-            {{gsl::at(
-                 expansion_map_options_.value().initial_values_outer_boundary,
-                 0)},
-             {gsl::at(
-                 expansion_map_options_.value().initial_values_outer_boundary,
-                 1)},
-             {gsl::at(
-                 expansion_map_options_.value().initial_values_outer_boundary,
-                 2)}}},
-        initial_time_,
-        expansion_map_options_.value().decay_timescale_outer_boundary);
+    result.merge(expansion_functions_of_time);
   }
-
-  DataVector initial_quaternion_value{4, 0.0};
-  DataVector initial_quaternion_first_derivative_value{4, 0.0};
-  DataVector initial_quaternion_second_derivative_value{4, 0.0};
 
   // RotationMap FunctionOfTime
   if (rotation_map_options_.has_value()) {
-    for (size_t i = 0; i < 4; i++) {
-      initial_quaternion_value[i] =
-          gsl::at(gsl::at(rotation_map_options_.value().initial_values, 0), i);
-      initial_quaternion_first_derivative_value[i] =
-          gsl::at(gsl::at(rotation_map_options_.value().initial_values, 1), i);
-      initial_quaternion_second_derivative_value[i] =
-          gsl::at(gsl::at(rotation_map_options_.value().initial_values, 2), i);
-    }
-    result[rotation_name] =
-        std::make_unique<FunctionsOfTime::SettleToConstantQuaternion>(
-            std::array<DataVector, 3>{
-                std::move(initial_quaternion_value),
-                std::move(initial_quaternion_first_derivative_value),
-                std::move(initial_quaternion_second_derivative_value)},
-            initial_time_, rotation_map_options_.value().decay_timescale);
+    result[rotation_name] = time_dependent_options::get_rotation(
+        rotation_map_options_.value(), initial_time_,
+        expiration_times.at(rotation_name));
   }
-
-  DataVector initial_translation_center{3, 0.0};
-  DataVector initial_translation_velocity{3, 0.0};
-  DataVector initial_translation_acceleration{3, 0.0};
 
   // Translation FunctionOfTime
   if (translation_map_options_.has_value()) {
-    for (size_t i = 0; i < 3; i++) {
-      initial_translation_center[i] = gsl::at(
-          gsl::at(translation_map_options_.value().initial_values, 0), i);
-      initial_translation_velocity[i] = gsl::at(
-          gsl::at(translation_map_options_.value().initial_values, 1), i);
-      initial_translation_acceleration[i] = gsl::at(
-          gsl::at(translation_map_options_.value().initial_values, 2), i);
-    }
-    result[translation_name] =
-        std::make_unique<FunctionsOfTime::PiecewisePolynomial<2>>(
-            initial_time_,
-            std::array<DataVector, 3>{
-                {std::move(initial_translation_center),
-                 std::move(initial_translation_velocity),
-                 std::move(initial_translation_acceleration)}},
-            expiration_times.at(translation_name));
+    result[translation_name] = time_dependent_options::get_translation(
+        translation_map_options_.value(), initial_time_,
+        expiration_times.at(translation_name));
   }
 
   return result;
@@ -190,6 +109,8 @@ void TimeDependentMapOptions::build_maps(
     const double outer_radius) {
   filled_ = filled;
   if (shape_map_options_.has_value()) {
+    const size_t l_max = time_dependent_options::l_max_from_shape_options(
+        shape_map_options_.value());
     std::unique_ptr<domain::CoordinateMaps::ShapeMapTransitionFunctions::
                         ShapeMapTransitionFunction>
         transition_func;
@@ -230,12 +151,9 @@ void TimeDependentMapOptions::build_maps(
               /* outer_sphericity */ 1.0,
               static_cast<WedgeTransition::Axis>(gsl::at(axes, j % 6)));
         }
-        gsl::at(shape_maps_, j) = ShapeMap{center,
-                                           shape_map_options_->l_max,
-                                           shape_map_options_->l_max,
-                                           std::move(transition_func),
-                                           shape_name,
-                                           size_name};
+        gsl::at(shape_maps_, j) =
+            ShapeMap{center,     l_max,    l_max, std::move(transition_func),
+                     shape_name, size_name};
       }
     } else {
       // Shape map transitions from 1 to 0 from the inner radius to the first
@@ -247,12 +165,9 @@ void TimeDependentMapOptions::build_maps(
           std::make_unique<domain::CoordinateMaps::ShapeMapTransitionFunctions::
                                SphereTransition>(inner_radius,
                                                  shape_outer_radius);
-      shape_maps_[0] = ShapeMap{center,
-                                shape_map_options_->l_max,
-                                shape_map_options_->l_max,
-                                std::move(transition_func),
-                                shape_name,
-                                size_name};
+      shape_maps_[0] =
+          ShapeMap{center,     l_max,    l_max, std::move(transition_func),
+                   shape_name, size_name};
     }
   }
 

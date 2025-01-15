@@ -49,6 +49,18 @@ class FunctionOfTime : public PUP::able {
 
   virtual auto get_clone() const -> std::unique_ptr<FunctionOfTime> = 0;
 
+  /// Create a FunctionOfTime at time \p t as if one had created a new
+  /// FunctionOfTime with \p t as its initial time, except the initial values of
+  /// new FunctionOfTime are the exact values of the old FunctionOfTime at time
+  /// \p t, and the new expriation is \p expiration_time.
+  ///
+  /// \details This defaults to just `get_clone()` since some functions can't be
+  /// updated/don't expire.
+  virtual std::unique_ptr<FunctionOfTime> create_at_time(
+      const double /*t*/, const double /*expiration_time*/) const {
+    return get_clone();
+  }
+
   /// Returns the domain of validity of the function.
   /// For FunctionsOfTime that allow a small amount of time extrapolation,
   /// `time_bounds` tells you the bounds including the allowed extrapolation

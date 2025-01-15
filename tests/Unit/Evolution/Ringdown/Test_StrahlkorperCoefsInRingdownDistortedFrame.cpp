@@ -15,8 +15,12 @@
 #include "DataStructures/DataVector.hpp"
 #include "Domain/CoordinateMaps/Distribution.hpp"
 #include "Domain/Creators/Sphere.hpp"
+#include "Domain/Creators/TimeDependentOptions/ExpansionMap.hpp"
+#include "Domain/Creators/TimeDependentOptions/RotationMap.hpp"
+#include "Domain/Creators/TimeDependentOptions/ShapeMap.hpp"
 #include "Domain/Creators/TimeDependentOptions/Sphere.hpp"
 #include "Domain/StrahlkorperTransformations.hpp"
+#include "Domain/Structure/ObjectLabel.hpp"
 #include "Evolution/Ringdown/StrahlkorperCoefsInRingdownDistortedFrame.hpp"
 #include "Framework/TestHelpers.hpp"
 #include "Helpers/DataStructures/MakeWithRandomValues.hpp"
@@ -86,7 +90,7 @@ SPECTRE_TEST_CASE(
   for (size_t i = 0; i < 4; ++i) {
     gsl::at(initial_unit_quaternion, i) /= initial_unit_quaternion_magnitude;
   }
-  const std::array<std::array<double, 4>, 3> rot_func_and_2_derivs{
+  const std::vector<std::array<double, 4>> rot_func_and_2_derivs{
       initial_unit_quaternion,
       make_with_random_values<std::array<double, 4>>(make_not_null(&generator),
                                                      make_not_null(&fot_dist)),
@@ -96,13 +100,14 @@ SPECTRE_TEST_CASE(
   std::uniform_real_distribution<double> settling_dist{0.5, 1.5};
   const double settling_timescale{settling_dist(generator)};
 
-  const domain::creators::sphere::TimeDependentMapOptions::ShapeMapOptions
+  const domain::creators::time_dependent_options::ShapeMapOptions<
+      false, domain::ObjectLabel::None>
       shape_map_options{l_max, std::nullopt};
-  const domain::creators::sphere::TimeDependentMapOptions::ExpansionMapOptions
+  const domain::creators::time_dependent_options::ExpansionMapOptions<true>
       expansion_map_options{exp_func_and_2_derivs, settling_timescale,
                             exp_outer_bdry_func_and_2_derivs,
                             settling_timescale};
-  const domain::creators::sphere::TimeDependentMapOptions::RotationMapOptions
+  const domain::creators::time_dependent_options::RotationMapOptions<true>
       rotation_map_options{rot_func_and_2_derivs, settling_timescale};
   const domain::creators::sphere::TimeDependentMapOptions
       time_dependent_map_options{match_time,           shape_map_options,

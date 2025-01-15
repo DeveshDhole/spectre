@@ -1,11 +1,11 @@
 // Distributed under the MIT License.
 // See LICENSE.txt for details.
 
-#include "Domain/FunctionsOfTime/QuaternionFunctionOfTime.hpp"
 #include "Framework/TestingFramework.hpp"
 
 #include <array>
 #include <cstddef>
+#include <limits>
 #include <sstream>
 #include <string>
 #include <variant>
@@ -14,9 +14,11 @@
 #include "Domain/Creators/TimeDependentOptions/FromVolumeFile.hpp"
 #include "Domain/Creators/TimeDependentOptions/RotationMap.hpp"
 #include "Domain/FunctionsOfTime/FunctionOfTime.hpp"
-#include "Domain/FunctionsOfTime/PiecewisePolynomial.hpp"
+#include "Domain/FunctionsOfTime/QuaternionFunctionOfTime.hpp"
 #include "Domain/FunctionsOfTime/RegisterDerivedWithCharm.hpp"
+#include "Domain/FunctionsOfTime/SettleToConstantQuaternion.hpp"
 #include "Framework/TestCreation.hpp"
+#include "Helpers/Domain/Creators/TimeDependent/TestHelpers.hpp"
 #include "IO/H5/AccessType.hpp"
 #include "IO/H5/File.hpp"
 #include "IO/H5/TensorData.hpp"
@@ -28,56 +30,89 @@
 #include "Utilities/MakeArray.hpp"
 #include "Utilities/Serialization/Serialize.hpp"
 
+namespace domain::creators::time_dependent_options {
 namespace {
-template <size_t Dim>
-std::string make_array_str(const double value) {
-  std::stringstream ss{};
-  ss << "[" << value;
-  if constexpr (Dim > 1) {
-    ss << ", " << value;
-    if constexpr (Dim > 2) {
-      ss << ", " << value;
-    }
-  }
-  ss << "]";
-
-  return ss.str();
-}
-
+constexpr double infinity = std::numeric_limits<double>::infinity();
 void test_rotation_map_options() {
   {
-    const auto rotation_map_options = TestHelpers::test_creation<
-        domain::creators::time_dependent_options::RotationMapOptions<2>>(
-        "InitialQuaternions: [[1.0, 0.0, 0.0, 0.0]]\n"
-        "InitialAngles: Auto\n"
-        "DecayTimescale: Auto\n");
-    CHECK(rotation_map_options.name() == "RotationMap");
-    std::array<DataVector, 3> expected_quat_func =
-        make_array<3>(DataVector{4, 0.0});
-    expected_quat_func[0][0] = 1.0;
-    const std::array<DataVector, 3> expected_angle_func =
-        make_array<3>(DataVector{3, 0.0});
-    CHECK(expected_quat_func == rotation_map_options.quaternions);
-    CHECK(expected_angle_func == rotation_map_options.angles);
-    CHECK_FALSE(rotation_map_options.decay_timescale.has_value());
+    INFO("None");
+    const auto rotation_map_options =
+        TestHelpers::test_option_tag<RotationMapOptions<false>>("None");
+
+    CHECK(not rotation_map_options.has_value());
   }
+  const auto non_settle_fots = []<bool AllowSettleFoTs>() {
+    INFO("Hardcoded AllowSettleFots = " + std::to_string(AllowSettleFoTs) +
+         ", Non-Settle Fots");
+    const auto rotation_map_options =
+        TestHelpers::test_option_tag<RotationMapOptions<AllowSettleFoTs>>(
+            "InitialAngularVelocity: [0.0, 0.4, 0.1]\n");
+
+    REQUIRE(rotation_map_options.has_value());
+    CHECK(std::holds_alternative<RotationMapOptions<AllowSettleFoTs>>(
+        rotation_map_options.value()));
+
+    const auto& hardcoded_options =
+        std::get<RotationMapOptions<AllowSettleFoTs>>(
+            rotation_map_options.value());
+
+    CHECK(hardcoded_options.quaternions ==
+          std::array{DataVector{1.0, 0.0, 0.0, 0.0}, DataVector{4, 0.0},
+                     DataVector{4, 0.0}});
+    CHECK(hardcoded_options.angles ==
+          std::array{DataVector{3, 0.0}, DataVector{0.0, 0.4, 0.1},
+                     DataVector{3, 0.0}, DataVector{3, 0.0}});
+    CHECK_FALSE(hardcoded_options.decay_timescale.has_value());
+
+    const auto rotation_ptr =
+        get_rotation(rotation_map_options.value(), 0.3, 2.9);
+
+    const auto* rotation =
+        dynamic_cast<domain::FunctionsOfTime::QuaternionFunctionOfTime<3>*>(
+            rotation_ptr.get());
+
+    REQUIRE(rotation != nullptr);
+
+    CHECK(rotation->time_bounds() == std::array{0.3, 2.9});
+    CHECK(rotation->func(0.3)[0] == DataVector{1.0, 0.0, 0.0, 0.0});
+  };
+
+  non_settle_fots.template operator()<false>();
+  non_settle_fots.template operator()<true>();
+
   {
-    const auto rotation_map_options = TestHelpers::test_creation<
-        domain::creators::time_dependent_options::RotationMapOptions<3>>(
-        "InitialQuaternions: [[1.0, 0.0, 0.0, 0.0]]\n"
-        "InitialAngles: [[0.1, 0.2, 0.3], [1.1, 1.2, 1.3]]\n"
-        "DecayTimescale: 50.0\n");
-    CHECK(rotation_map_options.name() == "RotationMap");
-    std::array<DataVector, 4> expected_quat_func =
-        make_array<4>(DataVector{4, 0.0});
-    expected_quat_func[0][0] = 1.0;
-    const std::array<DataVector, 4> expected_angle_func{
-        DataVector{0.1, 0.2, 0.3}, DataVector{1.1, 1.2, 1.3},
-        DataVector{3, 0.0}, DataVector{3, 0.0}};
-    CHECK(expected_quat_func == rotation_map_options.quaternions);
-    CHECK(expected_angle_func == rotation_map_options.angles);
-    CHECK(rotation_map_options.decay_timescale.has_value());
-    CHECK(rotation_map_options.decay_timescale.value() == 50.0);
+    INFO("Hardcoded AllowSettleFots = true, Settle Fots");
+    const auto rotation_map_options =
+        TestHelpers::test_option_tag<RotationMapOptions<true>>(
+            "InitialQuaternions: [[1.0, 0.0, 0.0, 0.0]]\n"
+            "DecayTimescale: 40\n");
+
+    REQUIRE(rotation_map_options.has_value());
+    CHECK(std::holds_alternative<RotationMapOptions<true>>(
+        rotation_map_options.value()));
+
+    const auto& hardcoded_options =
+        std::get<RotationMapOptions<true>>(rotation_map_options.value());
+
+    const std::array expected_values{DataVector{1.0}, DataVector{2.0},
+                                     DataVector{3.0}};
+    CHECK(hardcoded_options.quaternions ==
+          std::array{DataVector{1.0, 0.0, 0.0, 0.0}, DataVector{4, 0.0},
+                     DataVector{4, 0.0}});
+    CHECK(hardcoded_options.angles == make_array<4>(DataVector{3, 0.0}));
+    CHECK(hardcoded_options.decay_timescale == std::optional{40.0});
+
+    const auto rotation_ptr =
+        get_rotation(rotation_map_options.value(), 0.3, 2.9);
+
+    const auto* rotation =
+        dynamic_cast<domain::FunctionsOfTime::SettleToConstantQuaternion*>(
+            rotation_ptr.get());
+
+    REQUIRE(rotation != nullptr);
+
+    CHECK(rotation->time_bounds() == std::array{0.3, infinity});
+    CHECK(rotation->func(0.3)[0] == DataVector{1.0, 0.0, 0.0, 0.0});
   }
 
   std::unordered_map<std::string,
@@ -89,75 +124,77 @@ void test_rotation_map_options() {
           std::array{DataVector{3, 0.1}, DataVector{3, 0.2}, DataVector{3, 0.3},
                      DataVector{3, 0.4}},
           100.0);
+
   const std::string filename{"GoatCheese.h5"};
   const std::string subfile_name{"VolumeData"};
-  if (file_system::check_if_file_exists(filename)) {
-    file_system::rm(filename, true);
-  }
-  {
-    h5::H5File<h5::AccessType::ReadWrite> h5_file{filename};
-    auto& vol_file = h5_file.insert<h5::VolumeData>(subfile_name);
-
-    // We don't care about the volume data here, just the functions of time
-    vol_file.write_volume_data(
-        0, 0.0,
-        {ElementVolumeData{
-            "blah",
-            {TensorComponent{"RandomTensor", DataVector{3, 0.0}}},
-            {3},
-            {Spectral::Basis::Legendre},
-            {Spectral::Quadrature::GaussLobatto}}},
-        std::nullopt, serialize(functions_of_time));
-  }
 
   {
-    const auto rotation_map_options = TestHelpers::test_creation<
-        domain::creators::time_dependent_options::RotationMapOptions<2>>(
-        "InitialQuaternions:\n"
-        "  H5Filename: " +
-        filename + "\n  SubfileName: " + subfile_name +
-        "\n  Time: 0.0\n"
-        "InitialAngles: Auto\n"
-        "DecayTimescale: Auto\n");
-    CHECK(rotation_map_options.name() == "RotationMap");
-    // q
-    // dtq = 0.5 * q * omega
-    // d2tq = 0.5 * (dtq * omega + q * dtomega)
-    std::array<DataVector, 3> expected_quaternion{
-        DataVector{1.0, 0.0, 0.0, 0.0}, DataVector{0.0, 0.1, 0.1, 0.1},
-        DataVector{-0.03, 0.15, 0.15, 0.15}};
-    std::array<DataVector, 3> expected_angle{
-        DataVector{3, 0.1}, DataVector{3, 0.2}, DataVector{3, 0.3}};
+    INFO("FromVolumeFile non-Settle FoTs");
 
-    CHECK_ITERABLE_APPROX(expected_quaternion,
-                          rotation_map_options.quaternions);
-    CHECK(expected_angle == rotation_map_options.angles);
-    CHECK_FALSE(rotation_map_options.decay_timescale.has_value());
+    if (file_system::check_if_file_exists(filename)) {
+      file_system::rm(filename, true);
+    }
+
+    TestHelpers::domain::creators::write_volume_data(filename, subfile_name,
+                                                     functions_of_time);
+
+    const auto rotation_map_options =
+        TestHelpers::test_option_tag<RotationMapOptions<false>>(
+            "H5Filename: GoatCheese.h5\n"
+            "SubfileName: VolumeData");
+
+    REQUIRE(rotation_map_options.has_value());
+    CHECK(std::holds_alternative<FromVolumeFile>(rotation_map_options.value()));
+
+    const auto rotation_ptr =
+        get_rotation(rotation_map_options.value(), 0.3, 100.0);
+
+    const auto* rotation =
+        dynamic_cast<domain::FunctionsOfTime::QuaternionFunctionOfTime<3>*>(
+            rotation_ptr.get());
+
+    REQUIRE(rotation != nullptr);
+
+    CHECK(rotation->time_bounds() == std::array{0.3, 100.0});
+    CHECK(rotation->func_and_2_derivs(0.3) ==
+          functions_of_time.at("Rotation")->func_and_2_derivs(0.3));
   }
   {
-    const auto rotation_map_options = TestHelpers::test_creation<
-        domain::creators::time_dependent_options::RotationMapOptions<3>>(
-        "InitialQuaternions:\n"
-        "  H5Filename: " +
-        filename + "\n  SubfileName: " + subfile_name +
-        "\n  Time: 0.0\n"
-        "InitialAngles: [[0.11, 0.22, 0.33]]\n"
-        "DecayTimescale: Auto\n");
-    CHECK(rotation_map_options.name() == "RotationMap");
-    // q
-    // dtq = 0.5 * q * omega
-    // d2tq = 0.5 * (dtq * omega + q * dtomega)
-    std::array<DataVector, 4> expected_quaternion{
-        DataVector{1.0, 0.0, 0.0, 0.0}, DataVector{0.0, 0.1, 0.1, 0.1},
-        DataVector{-0.03, 0.15, 0.15, 0.15}, DataVector{4, 0.0}};
-    std::array<DataVector, 4> expected_angle{
-        DataVector{0.11, 0.22, 0.33}, DataVector{3, 0.0}, DataVector{3, 0.0},
-        DataVector{3, 0.0}};
+    INFO("FromVolumeFile Settle FoTs");
 
-    CHECK_ITERABLE_APPROX(expected_quaternion,
-                          rotation_map_options.quaternions);
-    CHECK(expected_angle == rotation_map_options.angles);
-    CHECK_FALSE(rotation_map_options.decay_timescale.has_value());
+    if (file_system::check_if_file_exists(filename)) {
+      file_system::rm(filename, true);
+    }
+
+    functions_of_time["Rotation"] =
+        std::make_unique<domain::FunctionsOfTime::SettleToConstantQuaternion>(
+            std::array{DataVector{1.0, 0.0, 0.0, 0.0}, DataVector{4, 2.0},
+                       DataVector{4, 3.0}},
+            0.0, 100.0);
+
+    TestHelpers::domain::creators::write_volume_data(filename, subfile_name,
+                                                     functions_of_time);
+
+    const auto rotation_map_options =
+        TestHelpers::test_option_tag<RotationMapOptions<true>>(
+            "H5Filename: GoatCheese.h5\n"
+            "SubfileName: VolumeData");
+
+    REQUIRE(rotation_map_options.has_value());
+    CHECK(std::holds_alternative<FromVolumeFile>(rotation_map_options.value()));
+
+    const auto rotation_ptr =
+        get_rotation(rotation_map_options.value(), 0.3, 100.0);
+
+    const auto* rotation =
+        dynamic_cast<domain::FunctionsOfTime::SettleToConstantQuaternion*>(
+            rotation_ptr.get());
+
+    REQUIRE(rotation != nullptr);
+
+    CHECK(rotation->time_bounds() == std::array{0.0, infinity});
+    CHECK(rotation->func_and_2_derivs(0.3) ==
+          functions_of_time.at("Rotation")->func_and_2_derivs(0.3));
   }
 
   if (file_system::check_if_file_exists(filename)) {
@@ -171,3 +208,4 @@ SPECTRE_TEST_CASE("Unit.Domain.Creators.TimeDependentOptions.RotationMap",
   domain::FunctionsOfTime::register_derived_with_charm();
   test_rotation_map_options();
 }
+}  // namespace domain::creators::time_dependent_options

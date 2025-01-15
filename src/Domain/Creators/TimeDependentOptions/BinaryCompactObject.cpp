@@ -16,12 +16,16 @@
 #include "Domain/CoordinateMaps/TimeDependent/ShapeMapTransitionFunctions/ShapeMapTransitionFunction.hpp"
 #include "Domain/CoordinateMaps/TimeDependent/ShapeMapTransitionFunctions/SphereTransition.hpp"
 #include "Domain/CoordinateMaps/TimeDependent/ShapeMapTransitionFunctions/Wedge.hpp"
+#include "Domain/Creators/TimeDependentOptions/ExpansionMap.hpp"
+#include "Domain/Creators/TimeDependentOptions/RotationMap.hpp"
 #include "Domain/Creators/TimeDependentOptions/ShapeMap.hpp"
+#include "Domain/Creators/TimeDependentOptions/TranslationMap.hpp"
 #include "Domain/FunctionsOfTime/FixedSpeedCubic.hpp"
 #include "Domain/FunctionsOfTime/FunctionOfTime.hpp"
 #include "Domain/FunctionsOfTime/IntegratedFunctionOfTime.hpp"
 #include "Domain/FunctionsOfTime/PiecewisePolynomial.hpp"
 #include "Domain/FunctionsOfTime/QuaternionFunctionOfTime.hpp"
+#include "Domain/Structure/ObjectLabel.hpp"
 #include "NumericalAlgorithms/SphericalHarmonics/Spherepack.hpp"
 #include "Options/ParseError.hpp"
 #include "PointwiseFunctions/AnalyticSolutions/GeneralRelativity/KerrHorizon.hpp"
@@ -34,19 +38,18 @@
 namespace domain::creators::bco {
 template <bool IsCylindrical>
 TimeDependentMapOptions<IsCylindrical>::TimeDependentMapOptions(
-    double initial_time,
-    std::optional<ExpansionMapOptions> expansion_map_options,
-    std::optional<RotationMapOptions> rotation_map_options,
-    std::optional<TranslationMapOptions> translation_map_options,
-    std::optional<ShapeMapOptions<domain::ObjectLabel::A>> shape_options_A,
-    std::optional<ShapeMapOptions<domain::ObjectLabel::B>> shape_options_B,
+    double initial_time, ExpansionMapOptionType expansion_map_options,
+    RotationMapOptionType rotation_map_options,
+    TranslationMapOptionType translation_map_options,
+    ShapeMapOptionType<domain::ObjectLabel::A> shape_options_A,
+    ShapeMapOptionType<domain::ObjectLabel::B> shape_options_B,
     const Options::Context& context)
     : initial_time_(initial_time),
-      expansion_map_options_(expansion_map_options),
-      rotation_map_options_(rotation_map_options),
-      translation_map_options_(translation_map_options),
-      shape_options_A_(shape_options_A),
-      shape_options_B_(shape_options_B) {
+      expansion_map_options_(std::move(expansion_map_options)),
+      rotation_map_options_(std::move(rotation_map_options)),
+      translation_map_options_(std::move(translation_map_options)),
+      shape_options_A_(std::move(shape_options_A)),
+      shape_options_B_(std::move(shape_options_B)) {
   if (not(expansion_map_options_.has_value() or
           rotation_map_options_.has_value() or
           translation_map_options_.has_value() or
@@ -60,10 +63,15 @@ TimeDependentMapOptions<IsCylindrical>::TimeDependentMapOptions(
 
   const auto check_l_max = [&context](const auto& shape_option,
                                       const domain::ObjectLabel label) {
-    if (shape_option.has_value() and shape_option.value().l_max <= 1) {
-      PARSE_ERROR(context, "Initial LMax for object "
-                               << label << " must be 2 or greater but is "
-                               << shape_option.value().l_max << " instead.");
+    if (shape_option.has_value() and
+        time_dependent_options::l_max_from_shape_options(
+            shape_option.value()) <= 1) {
+      PARSE_ERROR(context,
+                  "Initial LMax for object "
+                      << label << " must be 2 or greater but is "
+                      << time_dependent_options::l_max_from_shape_options(
+                             shape_option.value())
+                      << " instead.");
     }
   };
 
@@ -82,37 +90,42 @@ TimeDependentMapOptions<IsCylindrical>::create_worldtube_functions_of_time()
   std::unordered_map<std::string,
                      std::unique_ptr<domain::FunctionsOfTime::FunctionOfTime>>
       result{};
+
   // The functions of time need to be valid only for the very first time step,
   // after that they need to be updated by the worldtube singleton.
   const double initial_expiration_time = initial_time_ + 1e-10;
   if (not expansion_map_options_.has_value()) {
     ERROR("Initial values for the expansion map need to be provided.");
   }
+
+  const auto& expansion_map_opts =
+      std::get<time_dependent_options::ExpansionMapOptions<false>>(
+          expansion_map_options_.value());
   result[expansion_name] =
       std::make_unique<FunctionsOfTime::IntegratedFunctionOfTime>(
           initial_time_,
-          std::array<double, 2>{
-              {gsl::at(expansion_map_options_.value().initial_values, 0),
-               gsl::at(expansion_map_options_.value().initial_values, 1)}},
+          std::array<double, 2>{expansion_map_opts.initial_values[0][0],
+                                expansion_map_opts.initial_values[1][0]},
           initial_expiration_time, false);
   result[expansion_outer_boundary_name] =
       std::make_unique<FunctionsOfTime::FixedSpeedCubic>(
           1.0, initial_time_,
-          expansion_map_options_.value().outer_boundary_velocity,
-          expansion_map_options_.value().outer_boundary_decay_time);
+          expansion_map_opts.asymptotic_velocity_outer_boundary.value(),
+          expansion_map_opts.decay_timescale_outer_boundary);
+
   if (not rotation_map_options_.has_value()) {
     ERROR(
         "Initial values for the rotation map need to be provided when using "
         "the worldtube.");
   }
+  const auto& rotation_map_opts =
+      std::get<time_dependent_options::RotationMapOptions<false>>(
+          rotation_map_options_.value());
 
   result[rotation_name] =
       std::make_unique<FunctionsOfTime::IntegratedFunctionOfTime>(
           initial_time_,
-          std::array<double, 2>{
-              0.,
-              gsl::at(rotation_map_options_.value().initial_angular_velocity,
-                      2)},
+          std::array<double, 2>{0., rotation_map_opts.angles[1][2]},
           initial_expiration_time, true);
 
   // Size and Shape FunctionOfTime for objects A and B. Only spherical excision
@@ -122,15 +135,19 @@ TimeDependentMapOptions<IsCylindrical>::create_worldtube_functions_of_time()
         "Initial size for both excision spheres need to be provided when using "
         "the worldtube.");
   }
+  const auto& shape_opts_A = std::get<time_dependent_options::ShapeMapOptions<
+      not IsCylindrical, domain::ObjectLabel::A>>(shape_options_A_.value());
+  const auto& shape_opts_B = std::get<time_dependent_options::ShapeMapOptions<
+      not IsCylindrical, domain::ObjectLabel::B>>(shape_options_B_.value());
   for (size_t i = 0; i < shape_names.size(); i++) {
     const auto make_initial_size_values = [](const auto& lambda_options) {
       return std::array<double, 2>{
-          {gsl::at(lambda_options.value().initial_size_values.value(), 0),
-           gsl::at(lambda_options.value().initial_size_values.value(), 1)}};
+          {gsl::at(lambda_options.initial_size_values.value(), 0),
+           gsl::at(lambda_options.initial_size_values.value(), 1)}};
     };
     const std::array<double, 2> initial_size_values =
-        i == 0 ? make_initial_size_values(shape_options_A_)
-               : make_initial_size_values(shape_options_B_);
+        i == 0 ? make_initial_size_values(shape_opts_A)
+               : make_initial_size_values(shape_opts_B);
     const size_t initial_l_max = 2;
     const DataVector shape_zeros{
         ylm::Spherepack::spectral_size(initial_l_max, initial_l_max), 0.0};
@@ -186,96 +203,45 @@ TimeDependentMapOptions<IsCylindrical>::create_functions_of_time(
     expiration_times[name] = expr_time;
   }
 
-  // ExpansionMap FunctionOfTime for the function \f$a(t)\f$ in the
+  // ExpansionMap FunctionOfTime for the function a(t) and b(t) in the
   // domain::CoordinateMaps::TimeDependent::RotScaleTrans map
   if (expansion_map_options_.has_value()) {
-    result[expansion_name] =
-        std::make_unique<FunctionsOfTime::PiecewisePolynomial<2>>(
-            initial_time_,
-            std::array<DataVector, 3>{
-                {{gsl::at(expansion_map_options_.value().initial_values, 0)},
-                 {gsl::at(expansion_map_options_.value().initial_values, 1)},
-                 {0.0}}},
-            expiration_times.at(expansion_name));
+    auto expansion_functions_of_time = time_dependent_options::get_expansion(
+        expansion_map_options_.value(), initial_time_,
+        expiration_times.at(expansion_name));
 
-    // ExpansionMap FunctionOfTime for the function \f$b(t)\f$ in the
-    // domain::CoordinateMaps::TimeDependent::RotScaleTrans map
-    result[expansion_outer_boundary_name] =
-        std::make_unique<FunctionsOfTime::FixedSpeedCubic>(
-            1.0, initial_time_,
-            expansion_map_options_.value().outer_boundary_velocity,
-            expansion_map_options_.value().outer_boundary_decay_time);
+    result.merge(expansion_functions_of_time);
   }
 
   // RotationMap FunctionOfTime for the rotation angles about each
-  // axis.  The initial rotation angles don't matter as we never
-  // actually use the angles themselves. We only use their derivatives
-  // (omega) to determine map parameters. In theory we could determine
-  // each initial angle from the input axis-angle representation, but
-  // we don't need to.
+  // axis.
   if (rotation_map_options_.has_value()) {
-    result[rotation_name] = std::make_unique<
-        FunctionsOfTime::QuaternionFunctionOfTime<3>>(
-        initial_time_,
-        std::array<DataVector, 1>{DataVector{1.0, 0.0, 0.0, 0.0}},
-        std::array<DataVector, 4>{
-            {{3, 0.0},
-             {gsl::at(rotation_map_options_.value().initial_angular_velocity,
-                      0),
-              gsl::at(rotation_map_options_.value().initial_angular_velocity,
-                      1),
-              gsl::at(rotation_map_options_.value().initial_angular_velocity,
-                      2)},
-             {3, 0.0},
-             {3, 0.0}}},
+    result[rotation_name] = time_dependent_options::get_rotation(
+        rotation_map_options_.value(), initial_time_,
         expiration_times.at(rotation_name));
   }
 
   // TranslationMap FunctionOfTime
   if (translation_map_options_.has_value()) {
-    result[translation_name] = std::make_unique<
-        FunctionsOfTime::PiecewisePolynomial<2>>(
-        initial_time_,
-        std::array<DataVector, 3>{
-            {{gsl::at(translation_map_options_.value().initial_values, 0)[0],
-              gsl::at(translation_map_options_.value().initial_values, 0)[1],
-              gsl::at(translation_map_options_.value().initial_values, 0)[2]},
-             {gsl::at(translation_map_options_.value().initial_values, 1)[0],
-              gsl::at(translation_map_options_.value().initial_values, 1)[1],
-              gsl::at(translation_map_options_.value().initial_values, 1)[2]},
-             {gsl::at(translation_map_options_.value().initial_values, 2)[0],
-              gsl::at(translation_map_options_.value().initial_values, 2)[1],
-              gsl::at(translation_map_options_.value().initial_values, 2)[2]}}},
+    result[translation_name] = time_dependent_options::get_translation(
+        translation_map_options_.value(), initial_time_,
         expiration_times.at(translation_name));
   }
 
   // Size and Shape FunctionOfTime for objects A and B
-  const auto build_shape_and_size_fot =
-      [&result, &expiration_times, this](
-          const auto& shape_options, const double inner_radius,
-          const std::string& shape_name, const std::string& size_name) {
-        auto [shape_funcs, size_funcs] =
-            time_dependent_options::initial_shape_and_size_funcs(shape_options,
-                                                                 inner_radius);
-
-        result[shape_name] =
-            std::make_unique<FunctionsOfTime::PiecewisePolynomial<2>>(
-                initial_time_, std::move(shape_funcs),
-                expiration_times.at(shape_name));
-        result[size_name] =
-            std::make_unique<FunctionsOfTime::PiecewisePolynomial<3>>(
-                initial_time_, std::move(size_funcs),
-                expiration_times.at(size_name));
-      };
-
   if (shape_options_A_.has_value()) {
     if (not deformed_radii_[0].has_value()) {
       ERROR(
           "A shape map was specified for object A, but no inner radius is "
           "available. The object must be enclosed by a sphere.");
     }
-    build_shape_and_size_fot(shape_options_A_.value(), *deformed_radii_[0],
-                             shape_names[0], size_names[0]);
+
+    auto shape_and_size = time_dependent_options::get_shape_and_size(
+        shape_options_A_.value(), initial_time_,
+        expiration_times.at(shape_names[0]), expiration_times.at(size_names[0]),
+        *deformed_radii_[0]);
+
+    result.merge(shape_and_size);
   }
   if (shape_options_B_.has_value()) {
     if (not deformed_radii_[1].has_value()) {
@@ -283,8 +249,13 @@ TimeDependentMapOptions<IsCylindrical>::create_functions_of_time(
           "A shape map was specified for object B, but no inner radius is "
           "available. The object must be enclosed by a sphere.");
     }
-    build_shape_and_size_fot(shape_options_B_.value(), *deformed_radii_[1],
-                             shape_names[1], size_names[1]);
+
+    auto shape_and_size = time_dependent_options::get_shape_and_size(
+        shape_options_B_.value(), initial_time_,
+        expiration_times.at(shape_names[1]), expiration_times.at(size_names[1]),
+        *deformed_radii_[1]);
+
+    result.merge(shape_and_size);
   }
 
   return result;
@@ -354,8 +325,11 @@ void TimeDependentMapOptions<IsCylindrical>::build_maps(
     // Store the inner radii for creating functions of time
     gsl::at(deformed_radii_, i) = filled ? radii[1] : radii[0];
 
-    const size_t initial_l_max = i == 0 ? shape_options_A_.value().l_max
-                                        : shape_options_B_.value().l_max;
+    const size_t initial_l_max =
+        i == 0 ? time_dependent_options::l_max_from_shape_options(
+                     shape_options_A_.value())
+               : time_dependent_options::l_max_from_shape_options(
+                     shape_options_B_.value());
 
     std::unique_ptr<domain::CoordinateMaps::ShapeMapTransitionFunctions::
                         ShapeMapTransitionFunction>
@@ -385,8 +359,12 @@ void TimeDependentMapOptions<IsCylindrical>::build_maps(
       const std::array<int, 6> axes{3, -3, 2, -2, 1, -1};
 
       const bool transition_ends_at_cube =
-          i == 0 ? shape_options_A_->transition_ends_at_cube
-                 : shape_options_B_->transition_ends_at_cube;
+          i == 0 ? time_dependent_options::
+                       transition_ends_at_cube_from_shape_options(
+                           shape_options_A_.value())
+                 : time_dependent_options::
+                       transition_ends_at_cube_from_shape_options(
+                           shape_options_B_.value());
 
       // These centers must take in to account if we have an offset of the
       // center of the object and where the transition ends. The inner center
@@ -469,8 +447,16 @@ TimeDependentMapOptions<IsCylindrical>::distorted_to_inertial_map(
   } else {
     const bool transition_ends_at_cube =
         Object == domain::ObjectLabel::A
-            ? shape_options_A_->transition_ends_at_cube
-            : shape_options_B_->transition_ends_at_cube;
+            ? (shape_options_A_.has_value()
+                   ? time_dependent_options::
+                         transition_ends_at_cube_from_shape_options(
+                             shape_options_A_.value())
+                   : false)
+            : (shape_options_B_.has_value()
+                   ? time_dependent_options::
+                         transition_ends_at_cube_from_shape_options(
+                             shape_options_B_.value())
+                   : false);
     block_has_shape_map =
         include_distorted_map.has_value() and
         (transition_ends_at_cube or include_distorted_map.value() < 6);
@@ -505,11 +491,15 @@ TimeDependentMapOptions<IsCylindrical>::grid_to_distorted_map(
 
   if constexpr (IsCylindrical) {
     block_has_shape_map = block_has_shape_map and include_distorted_map;
-  } else {
+  } else if (block_has_shape_map) {
     const bool transition_ends_at_cube =
         Object == domain::ObjectLabel::A
-            ? shape_options_A_->transition_ends_at_cube
-            : shape_options_B_->transition_ends_at_cube;
+            ? time_dependent_options::
+                  transition_ends_at_cube_from_shape_options(
+                      shape_options_A_.value())
+            : time_dependent_options::
+                  transition_ends_at_cube_from_shape_options(
+                      shape_options_B_.value());
     block_has_shape_map =
         block_has_shape_map and include_distorted_map.has_value() and
         (transition_ends_at_cube or include_distorted_map.value() < 6);
@@ -550,11 +540,15 @@ TimeDependentMapOptions<IsCylindrical>::grid_to_inertial_map(
 
   if constexpr (IsCylindrical) {
     block_has_shape_map = block_has_shape_map and include_distorted_map;
-  } else {
+  } else if (block_has_shape_map) {
     const bool transition_ends_at_cube =
         Object == domain::ObjectLabel::A
-            ? shape_options_A_->transition_ends_at_cube
-            : shape_options_B_->transition_ends_at_cube;
+            ? time_dependent_options::
+                  transition_ends_at_cube_from_shape_options(
+                      shape_options_A_.value())
+            : time_dependent_options::
+                  transition_ends_at_cube_from_shape_options(
+                      shape_options_B_.value());
     block_has_shape_map =
         block_has_shape_map and include_distorted_map.has_value() and
         (transition_ends_at_cube or include_distorted_map.value() < 6);

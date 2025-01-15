@@ -70,6 +70,13 @@ std::unique_ptr<FunctionOfTime> PiecewisePolynomial<MaxDeriv>::get_clone()
 }
 
 template <size_t MaxDeriv>
+std::unique_ptr<FunctionOfTime> PiecewisePolynomial<MaxDeriv>::create_at_time(
+    const double t, const double expiration_time) const {
+  return std::make_unique<PiecewisePolynomial>(t, func_and_derivs(t),
+                                               expiration_time);
+}
+
+template <size_t MaxDeriv>
 template <size_t MaxDerivReturned>
 std::array<DataVector, MaxDerivReturned + 1>
 PiecewisePolynomial<MaxDeriv>::func_and_derivs(const double t) const {

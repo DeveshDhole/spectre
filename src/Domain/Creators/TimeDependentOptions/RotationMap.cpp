@@ -4,6 +4,7 @@
 #include "Domain/Creators/TimeDependentOptions/RotationMap.hpp"
 
 #include <array>
+#include <cmath>
 #include <optional>
 #include <string>
 #include <utility>
@@ -11,6 +12,8 @@
 
 #include "DataStructures/DataVector.hpp"
 #include "Domain/Creators/TimeDependentOptions/FromVolumeFile.hpp"
+#include "Domain/FunctionsOfTime/QuaternionFunctionOfTime.hpp"
+#include "Domain/FunctionsOfTime/SettleToConstantQuaternion.hpp"
 #include "Options/Context.hpp"
 #include "Options/ParseError.hpp"
 #include "Utilities/ErrorHandling/Error.hpp"
@@ -18,88 +21,104 @@
 #include "Utilities/MakeArray.hpp"
 
 namespace domain::creators::time_dependent_options {
-template <size_t NumDerivs>
-RotationMapOptions<NumDerivs>::RotationMapOptions(
-    std::variant<std::vector<std::array<double, 4>>,
-                 FromVolumeFile<names::Rotation>>
-        initial_quaternions,
-    std::optional<std::vector<std::array<double, 3>>> initial_angles,
-    std::optional<double> decay_timescale_in, const Options::Context& context)
+template <bool AllowSettleFoTs>
+void RotationMapOptions<AllowSettleFoTs>::initialize_angles_and_quats() {
+  quaternions = make_array<3, DataVector>(DataVector{4, 0.0});
+  // Defautl to the identity quaternion
+  quaternions[0][0] = 1.0;
+  angles = make_array<4, DataVector>(DataVector{3, 0.0});
+}
+
+template <bool AllowSettleFoTs>
+RotationMapOptions<AllowSettleFoTs>::RotationMapOptions(
+    const std::array<double, 3>& initial_angular_velocity,
+    const Options::Context& /*context*/) {
+  initialize_angles_and_quats();
+
+  angles[1] = DataVector{initial_angular_velocity};
+}
+
+template <bool AllowSettleFoTs>
+RotationMapOptions<AllowSettleFoTs>::RotationMapOptions(
+    const std::vector<std::array<double, 4>>& initial_quaternions,
+    const double decay_timescale_in, const Options::Context& context)
     : decay_timescale(decay_timescale_in) {
-  quaternions = make_array<NumDerivs + 1, DataVector>(DataVector{4, 0.0});
-  angles = make_array<NumDerivs + 1, DataVector>(DataVector{3, 0.0});
+  initialize_angles_and_quats();
 
-  if (std::holds_alternative<std::vector<std::array<double, 4>>>(
-          initial_quaternions)) {
-    auto& values =
-        std::get<std::vector<std::array<double, 4>>>(initial_quaternions);
-    if (values.empty() or values.size() > quaternions.size()) {
-      PARSE_ERROR(
-          context,
-          "Must specify at least the value of the quaternion, and optionally "
-          "up to "
-              << NumDerivs << " time derivatives.");
-    }
-    for (size_t i = 0; i < values.size(); i++) {
-      gsl::at(quaternions, i) =
-          DataVector{values[i][0], values[i][1], values[i][2], values[i][3]};
-    }
-
-    if (initial_angles.has_value()) {
-      auto& angle_values = initial_angles.value();
-      if (angle_values.empty() or angle_values.size() > angles.size()) {
-        PARSE_ERROR(
-            context,
-            "When specifying the angle, you must specify at least the value, "
-            "and optionally up to "
-                << NumDerivs << " time derivatives.");
-      }
-      for (size_t i = 0; i < angle_values.size(); i++) {
-        gsl::at(angles, i) = DataVector{angle_values[i][0], angle_values[i][1],
-                                        angle_values[i][2]};
-      }
-    }
-  } else if (std::holds_alternative<FromVolumeFile<names::Rotation>>(
-                 initial_quaternions)) {
-    if (decay_timescale.has_value()) {
-      PARSE_ERROR(context,
-                  "When specifying the initial quaternions from a volume file, "
-                  "the decay timescale must be 'Auto'.");
-    }
-    auto& values_from_file =
-        std::get<FromVolumeFile<names::Rotation>>(initial_quaternions);
-
-    for (size_t i = 0; i < values_from_file.quaternions.size(); i++) {
-      gsl::at(quaternions, i) = gsl::at(values_from_file.quaternions, i);
-      gsl::at(angles, i) = gsl::at(values_from_file.angle_values, i);
-    }
-
-    if (initial_angles.has_value()) {
-      // Reset angle func so derivs that weren't specified are zero
-      angles = make_array<NumDerivs + 1, DataVector>(DataVector{3, 0.0});
-      auto& angle_values = initial_angles.value();
-      if (angle_values.empty() or angle_values.size() > angles.size()) {
-        PARSE_ERROR(
-            context,
-            "When specifying the angle, you must specify at least the value, "
-            "and optionally up to "
-                << NumDerivs << " time derivatives.");
-      }
-      for (size_t i = 0; i < angle_values.size(); i++) {
-        gsl::at(angles, i) = DataVector{angle_values[i][0], angle_values[i][1],
-                                        angle_values[i][2]};
-      }
-    }
+  if (initial_quaternions.empty() or initial_quaternions.size() > 3) {
+    PARSE_ERROR(
+        context,
+        "Must specify at least the value of the quaternion, and optionally "
+        "up to 2 time derivatives.");
+  }
+  for (size_t i = 0; i < initial_quaternions.size(); i++) {
+    gsl::at(quaternions, i) = DataVector{initial_quaternions[i]};
   }
 }
 
-#define NUMDERIVS(data) BOOST_PP_TUPLE_ELEM(0, data)
+template <bool AllowSettleFoTs>
+std::unique_ptr<domain::FunctionsOfTime::FunctionOfTime> get_rotation(
+    const std::variant<RotationMapOptions<AllowSettleFoTs>, FromVolumeFile>&
+        rotation_map_options,
+    const double initial_time, const double expiration_time) {
+  const std::string name = "Rotation";
+  std::unique_ptr<domain::FunctionsOfTime::FunctionOfTime> result{};
 
-#define INSTANTIATE(_, data) \
-  template struct RotationMapOptions<NUMDERIVS(data)>;
+  if (std::holds_alternative<FromVolumeFile>(rotation_map_options)) {
+    const auto& from_vol_file = std::get<FromVolumeFile>(rotation_map_options);
+    const auto volume_fot =
+        from_vol_file.retrieve_function_of_time({name}, initial_time);
 
-GENERATE_INSTANTIATIONS(INSTANTIATE, (2, 3))
+    // It must be either a QuaternionFoT or a SettleToConstant
+    const auto* quat_volume_fot =
+        dynamic_cast<domain::FunctionsOfTime::QuaternionFunctionOfTime<3>*>(
+            volume_fot.at(name).get());
+    const auto* settle_volume_fot =
+        dynamic_cast<domain::FunctionsOfTime::SettleToConstantQuaternion*>(
+            volume_fot.at(name).get());
+
+    if (UNLIKELY(quat_volume_fot == nullptr and settle_volume_fot == nullptr)) {
+      ERROR_NO_TRACE(
+          "Rotation function of time read from volume data is not a "
+          "QuaternionFunctionOfTime<3> or a SettleToConstantQuaternion. Cannot "
+          "use it to initialize the rotation map.");
+    }
+
+    result = volume_fot.at(name)->create_at_time(initial_time, expiration_time);
+  } else if (std::holds_alternative<RotationMapOptions<AllowSettleFoTs>>(
+                 rotation_map_options)) {
+    const auto& hard_coded_options =
+        std::get<RotationMapOptions<AllowSettleFoTs>>(rotation_map_options);
+
+    if (hard_coded_options.decay_timescale.has_value()) {
+      result =
+          std::make_unique<domain::FunctionsOfTime::SettleToConstantQuaternion>(
+              hard_coded_options.quaternions, initial_time,
+              hard_coded_options.decay_timescale.value());
+    } else {
+      result = std::make_unique<
+          domain::FunctionsOfTime::QuaternionFunctionOfTime<3>>(
+          initial_time, std::array{hard_coded_options.quaternions[0]},
+          hard_coded_options.angles, expiration_time);
+    }
+  } else {
+    ERROR("Unknown RotationMap.");
+  }
+
+  return result;
+}
+
+#define ALLOWSETTLE(data) BOOST_PP_TUPLE_ELEM(0, data)
+
+#define INSTANTIATE(_, data)                                             \
+  template struct RotationMapOptions<ALLOWSETTLE(data)>;                 \
+  template std::unique_ptr<domain::FunctionsOfTime::FunctionOfTime>      \
+  get_rotation(const std::variant<RotationMapOptions<ALLOWSETTLE(data)>, \
+                                  FromVolumeFile>& rotation_map_options, \
+               double initial_time, double expiration_time);
+
+GENERATE_INSTANTIATIONS(INSTANTIATE, (true, false))
 
 #undef INSTANTIATE
-#undef NUMDERIVS
+#undef ALLOWSETTLE
 }  // namespace domain::creators::time_dependent_options

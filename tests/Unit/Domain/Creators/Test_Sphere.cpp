@@ -38,12 +38,14 @@
 #include "Domain/Creators/TimeDependence/RegisterDerivedWithCharm.hpp"
 #include "Domain/Creators/TimeDependence/UniformTranslation.hpp"
 #include "Domain/Creators/TimeDependentOptions/ShapeMap.hpp"
+#include "Domain/Creators/TimeDependentOptions/TranslationMap.hpp"
 #include "Domain/Domain.hpp"
 #include "Domain/ElementMap.hpp"
 #include "Domain/FunctionsOfTime/PiecewisePolynomial.hpp"
 #include "Domain/Structure/BlockNeighbor.hpp"
 #include "Domain/Structure/Direction.hpp"
 #include "Domain/Structure/DirectionMap.hpp"
+#include "Domain/Structure/ObjectLabel.hpp"
 #include "Domain/Structure/OrientationMap.hpp"
 #include "Framework/TestCreation.hpp"
 #include "Framework/TestHelpers.hpp"
@@ -595,16 +597,18 @@ void test_sphere(const gsl::not_null<Generator*> gen) {
 
     if (time_dependent) {
       if (use_hard_coded_time_dep_options) {
+        using namespace domain::creators::time_dependent_options;  // NOLINT
         translation_velocity = std::array<double, 3>{{0.001, -0.003, 0.005}};
-        time_dependent_options = creators::sphere::TimeDependentMapOptions(
+        time_dependent_options = creators::sphere::TimeDependentMapOptions{
             1.0,
-            creators::sphere::TimeDependentMapOptions::ShapeMapOptions{
-                l_max, std::nullopt},
-            std::nullopt, std::nullopt,
-            creators::sphere::TimeDependentMapOptions::TranslationMapOptions{
-                {std::array<double, 3>{0.0, 0.0, 0.0}, translation_velocity,
-                 std::array<double, 3>{0.0, 0.0, 0.0}}},
-            false);
+            ShapeMapOptions<false, domain::ObjectLabel::None>{l_max,
+                                                              std::nullopt},
+            std::nullopt,
+            std::nullopt,
+            TranslationMapOptions<3>{std::array{
+                std::array<double, 3>{0.0, 0.0, 0.0}, translation_velocity,
+                std::array<double, 3>{0.0, 0.0, 0.0}}},
+            false};
       } else {
         time_dependent_options = std::make_unique<
             domain::creators::time_dependence::UniformTranslation<3, 0>>(
@@ -717,8 +721,10 @@ void test_shape_distortion() {
       time_dependent_options =
           domain::creators::sphere::TimeDependentMapOptions{
               time,
-              {{l_max, domain::creators::time_dependent_options::
-                           KerrSchildFromBoyerLindquist{mass, spin}}},
+              domain::creators::time_dependent_options::ShapeMapOptions<
+                  false, domain::ObjectLabel::None>{
+                  l_max, domain::creators::time_dependent_options::
+                             KerrSchildFromBoyerLindquist{mass, spin}},
               std::nullopt,
               std::nullopt,
               std::nullopt,
@@ -750,16 +756,18 @@ void test_shape_distortion() {
 
     time_dependent_options = domain::creators::sphere::TimeDependentMapOptions{
         time,
-        {{l_max,
-          domain::creators::time_dependent_options::YlmsFromFile{
-              h5_filename, std::vector{subfile_name}, time, std::nullopt,
-              false},
-          // Constructing a strahlkorper from collocation radii will not exactly
-          // match the collocation points (see Strahlkorper constructor docs).
-          // For this reason, the 00 coef we calculate is not exact. This is why
-          // we just hard code the proper value here. If you change l_max, this
-          // value must also change.
-          std::array{-4.6442771561420703730e-01, 0.0, 0.0}}},
+        domain::creators::time_dependent_options::ShapeMapOptions<
+            false, domain::ObjectLabel::None>{
+            l_max,
+            domain::creators::time_dependent_options::YlmsFromFile{
+                h5_filename, std::vector{subfile_name}, time, std::nullopt,
+                false},
+            // Constructing a strahlkorper from collocation radii will not
+            // exactly match the collocation points (see Strahlkorper
+            // constructor docs). For this reason, the 00 coef we calculate is
+            // not exact. This is why we just hard code the proper value here.
+            // If you change l_max, this value must also change.
+            std::array{-4.6442771561420703730e-01, 0.0, 0.0}},
         std::nullopt,
         std::nullopt,
         std::nullopt,

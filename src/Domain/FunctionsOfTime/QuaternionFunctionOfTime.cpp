@@ -32,6 +32,7 @@
 #include "Utilities/ErrorHandling/Error.hpp"
 #include "Utilities/GenerateInstantiations.hpp"
 #include "Utilities/Gsl.hpp"
+#include "Utilities/MakeArray.hpp"
 #include "Utilities/Serialization/PupBoost.hpp"
 #include "Utilities/StdHelpers.hpp"
 
@@ -77,6 +78,14 @@ template <size_t MaxDeriv>
 std::unique_ptr<FunctionOfTime> QuaternionFunctionOfTime<MaxDeriv>::get_clone()
     const {
   return std::make_unique<QuaternionFunctionOfTime>(*this);
+}
+
+template <size_t MaxDeriv>
+std::unique_ptr<FunctionOfTime>
+QuaternionFunctionOfTime<MaxDeriv>::create_at_time(
+    const double t, const double expiration_time) const {
+  return std::make_unique<QuaternionFunctionOfTime>(
+      t, func(t), angle_f_of_t_.func_and_derivs(t), expiration_time);
 }
 
 template <size_t MaxDeriv>

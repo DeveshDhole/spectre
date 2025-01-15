@@ -10,6 +10,8 @@
 #include "DataStructures/Matrix.hpp"
 #include "Domain/CoordinateMaps/Distribution.hpp"
 #include "Domain/Creators/Sphere.hpp"
+#include "Domain/Creators/TimeDependentOptions/ExpansionMap.hpp"
+#include "Domain/Creators/TimeDependentOptions/RotationMap.hpp"
 #include "Domain/Creators/TimeDependentOptions/Sphere.hpp"
 #include "Domain/StrahlkorperTransformations.hpp"
 #include "IO/H5/Dat.hpp"
@@ -26,7 +28,7 @@ std::vector<DataVector> strahlkorper_coefs_in_ringdown_distorted_frame(
     const double settling_timescale,
     const std::array<double, 3>& exp_func_and_2_derivs,
     const std::array<double, 3>& exp_outer_bdry_func_and_2_derivs,
-    const std::array<std::array<double, 4>, 3>& rot_func_and_2_derivs) {
+    const std::vector<std::array<double, 4>>& rot_func_and_2_derivs) {
   // Read the AhC coefficients from the H5 file
   const std::vector<ylm::Strahlkorper<Frame::Inertial>>& ahc_inertial_h5 =
       ylm::read_surface_ylm<Frame::Inertial>(
@@ -47,11 +49,11 @@ std::vector<DataVector> strahlkorper_coefs_in_ringdown_distorted_frame(
   // Create a time-dependent domain; only the the time-dependent map options
   // matter; the domain is just a spherical shell with inner and outer
   // radii chosen so any conceivable common horizon will fit between them.
-  const domain::creators::sphere::TimeDependentMapOptions::ExpansionMapOptions
+  const domain::creators::time_dependent_options::ExpansionMapOptions<true>
       expansion_map_options{exp_func_and_2_derivs, settling_timescale,
                             exp_outer_bdry_func_and_2_derivs,
                             settling_timescale};
-  const domain::creators::sphere::TimeDependentMapOptions::RotationMapOptions
+  const domain::creators::time_dependent_options::RotationMapOptions<true>
       rotation_map_options{rot_func_and_2_derivs, settling_timescale};
   const domain::creators::sphere::TimeDependentMapOptions
       time_dependent_map_options{match_time,           std::nullopt,

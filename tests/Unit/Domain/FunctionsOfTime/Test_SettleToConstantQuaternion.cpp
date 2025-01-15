@@ -57,6 +57,12 @@ void test(
   CHECK(t_bounds[1] == std::numeric_limits<double>::infinity());
   CHECK(f_of_t->expiration_after(match_time) ==
         std::numeric_limits<double>::infinity());
+
+  CHECK(
+      dynamic_cast<const domain::FunctionsOfTime::SettleToConstantQuaternion&>(
+          *f_of_t->get_clone()) ==
+      dynamic_cast<const domain::FunctionsOfTime::SettleToConstantQuaternion&>(
+          *f_of_t->create_at_time(0.0, 0.0)));
 }
 }  // namespace
 

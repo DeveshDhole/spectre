@@ -8,6 +8,7 @@
 #include <string>
 #include <type_traits>
 
+#include "Options/Auto.hpp"
 #include "Options/Options.hpp"
 #include "Options/ParseOptions.hpp"
 #include "Options/Protocols/FactoryCreation.hpp"
@@ -51,6 +52,23 @@ struct AddGroups<Tag, std::void_t<typename Tag::group>> {
         AddGroups<void>::template apply<Tag>(construction_string));
   }
 };
+
+template <typename OptionTag, bool IsAuto>
+struct option_return;
+
+template <typename OptionTag>
+struct option_return<OptionTag, true> {
+  using type = typename OptionTag::type::value_type;
+};
+
+template <typename OptionTag>
+struct option_return<OptionTag, false> {
+  using type = typename OptionTag::type;
+};
+
+template <typename OptionTag>
+using option_return_t = typename option_return<
+    OptionTag, tt::is_a_v<Options::Auto, typename OptionTag::type>>::type;
 
 template <typename BaseClass, typename DerivedClass>
 struct SingleFactoryMetavariables {
@@ -106,7 +124,7 @@ T test_creation(const std::string& construction_string) {
 ///
 /// \see TestHelpers::test_creation()
 template <typename OptionTag, typename Metavariables = NoSuchType>
-typename OptionTag::type test_option_tag(
+TestCreation_detail::option_return_t<OptionTag> test_option_tag(
     const std::string& construction_string) {
   Options::Parser<tmpl::list<OptionTag>> options("");
   options.parse(

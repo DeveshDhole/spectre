@@ -72,6 +72,13 @@ void test(const gsl::not_null<FunctionsOfTime::FunctionOfTime*> f_of_t,
   CHECK(t_bounds[0] == 0.0);
   CHECK(t_bounds[1] == 4.8);
   CHECK(f_of_t->expiration_after(0.0) == dt);
+
+  const double new_time = 1.0;
+  const double new_expiration = 2.1;
+  const auto copy_at_time = f_of_t->create_at_time(new_time, new_expiration);
+  const auto new_t_bounds = copy_at_time->time_bounds();
+  CHECK(new_t_bounds[0] == new_time);
+  CHECK(new_t_bounds[1] == new_expiration);
 }
 
 template <size_t DerivOrder>
@@ -173,21 +180,33 @@ void check_func_and_derivs(
     const FunctionsOfTime::PiecewisePolynomial<MaxDeriv>& f_of_t,
     const quartic& q) {
   const double t = 0.5;
-  CHECK(f_of_t.func(t) == q.func_and_derivs<0>(t));
-  CHECK(f_of_t.func_and_deriv(t) == q.func_and_derivs<1>(t));
-  CHECK(f_of_t.func_and_2_derivs(t) == q.func_and_derivs<2>(t));
-  auto func_and_all_derivs = f_of_t.func_and_all_derivs(t);
-  auto func_and_2_derivs = q.func_and_derivs<2>(t);
-  CHECK(func_and_all_derivs.size() == MaxDeriv + 1);
-  for (size_t i = 0;
-       i < std::min(func_and_all_derivs.size(), func_and_2_derivs.size());
-       i++) {
-    CHECK(func_and_all_derivs[i] == gsl::at(func_and_2_derivs, i));
-  }
+
+  const auto& do_check = [&](const auto& f_of_t_to_check) {
+    CHECK_ITERABLE_APPROX(f_of_t_to_check.func(t), q.func_and_derivs<0>(t));
+    CHECK_ITERABLE_APPROX(f_of_t_to_check.func_and_deriv(t),
+                          q.func_and_derivs<1>(t));
+    CHECK_ITERABLE_APPROX(f_of_t_to_check.func_and_2_derivs(t),
+                          q.func_and_derivs<2>(t));
+    auto func_and_all_derivs = f_of_t_to_check.func_and_all_derivs(t);
+    auto func_and_2_derivs = q.func_and_derivs<2>(t);
+    CHECK(func_and_all_derivs.size() == MaxDeriv + 1);
+    for (size_t i = 0;
+         i < std::min(func_and_all_derivs.size(), func_and_2_derivs.size());
+         i++) {
+      CHECK_ITERABLE_APPROX(func_and_all_derivs[i],
+                            gsl::at(func_and_2_derivs, i));
+    }
+  };
+
+  do_check(f_of_t);
 
   test_copy_semantics(f_of_t);
   auto f_of_t_copy = f_of_t;
   test_move_semantics(std::move(f_of_t_copy), f_of_t);
+
+  const auto copy_at_time = f_of_t.create_at_time(0.4, 1.1);
+
+  do_check(*copy_at_time);
 }
 
 void test_func_and_derivs() {

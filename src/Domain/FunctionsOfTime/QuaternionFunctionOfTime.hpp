@@ -42,6 +42,12 @@ namespace domain::FunctionsOfTime {
  * around the internal `PiecewisePolynomial::update` function with the addition
  * that it then updates the stored quaternions as well.
  *
+ * \note The initial rotation angles passed to the angle PiecewisePolynomial
+ * don't matter as we never actually use the angles themselves. We only use
+ * their derivatives (angular velocity) to determine map parameters. In theory
+ * we could determine each initial angle from the input axis-angle
+ * representation, but we don't need to.
+ *
  * The angle PiecewisePolynomial is accessible through the `angle_func`,
  * `angle_func_and_deriv`, and `angle_func_and_2_derivs` functions which
  * correspond to the function calls of a normal PiecewisePolynomial except
@@ -78,6 +84,9 @@ class QuaternionFunctionOfTime : public FunctionOfTime {
   // LCOV_EXCL_STOP
 
   auto get_clone() const -> std::unique_ptr<FunctionOfTime> override;
+
+  std::unique_ptr<FunctionOfTime> create_at_time(
+      double t, double expiration_time) const override;
 
   // clang-tidy: google-runtime-references
   // clang-tidy: cppcoreguidelines-owning-memory,-warnings-as-errors
