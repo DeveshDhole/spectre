@@ -20,7 +20,7 @@ class TestExecutableStatus(unittest.TestCase):
     def setUp(self):
         self.input_file = {
             "Observers": {"ReductionFileName": "Reductions"},
-            "EventsAndTriggers": [
+            "EventsAndTriggersAtSlabs": [
                 {
                     "Trigger": "Always",
                     "Events": [

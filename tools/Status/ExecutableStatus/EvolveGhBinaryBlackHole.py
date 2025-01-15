@@ -98,13 +98,13 @@ class EvolveGhBinaryBlackHole(EvolutionStatus):
             return f"{value:.2e}"
         return super().format(field, value)
 
-    def render_dashboard(self, job: dict, input_file: dict):
+    def render_dashboard(self, job: dict, input_file: dict, metadata: dict):
         import matplotlib.pyplot as plt
         import plotly.express as px
         import streamlit as st
 
-        from spectre.Pipelines.EccentricityControl.EccentricityControl import (
-            coordinate_separation_eccentricity_control,
+        from spectre.Pipelines.EccentricityControl.EccentricityControlParams import (
+            eccentricity_control_params,
         )
         from spectre.Visualization.GenerateXdmf import generate_xdmf
         from spectre.Visualization.PlotControlSystem import plot_control_system
@@ -269,22 +269,12 @@ class EvolveGhBinaryBlackHole(EvolutionStatus):
         def render_eccentricity():
             if st.checkbox("Show eccentricity"):
                 col_tmin, col_tmax = st.columns(2)
-                fig = plt.figure(figsize=(10, 8), layout="tight")
-                ecc_control_result = coordinate_separation_eccentricity_control(
-                    reduction_files[0],
-                    "ApparentHorizons/ControlSystemAhA_Centers.dat",
-                    "ApparentHorizons/ControlSystemAhB_Centers.dat",
+                ecc, _, _ = eccentricity_control_params(
+                    reduction_files,
+                    metadata["Next"]["With"]["id_input_file_path"],
                     tmin=col_tmin.number_input("tmin", value=600, min_value=0),
                     tmax=col_tmax.number_input("tmax", value=2000, min_value=0),
-                    angular_velocity_from_xcts=None,
-                    expansion_from_xcts=None,
-                    fig=fig,
-                )["H4"]["fit result"]
-                st.pyplot(fig)
-                st.metric(
-                    "Eccentricity",
-                    f"{ecc_control_result['eccentricity']:e}",
                 )
-                st.write(ecc_control_result)
+                st.metric("Eccentricity", f"{ecc:e}")
 
         render_eccentricity()

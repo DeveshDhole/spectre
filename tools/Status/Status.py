@@ -123,6 +123,14 @@ def get_input_file(comment: Optional[str], work_dir: str) -> Optional[str]:
     # Fallback: Check if there's a single YAML file in the work dir
     yaml_files = glob.glob(os.path.join(work_dir, "*.yaml"))
     if len(yaml_files) == 1:
+        try:
+            open(yaml_files[0], "r").close()
+        except PermissionError:
+            logger.debug(
+                f"Unable to open potential input file: {yaml_files[0]}.",
+                exc_info=True,
+            )
+            return None
         return yaml_files[0]
     else:
         logger.debug(

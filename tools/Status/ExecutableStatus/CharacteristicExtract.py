@@ -49,7 +49,7 @@ class CharacteristicExtract(ExecutableStatus):
             return f"{value:g}"
         raise ValueError
 
-    def render_dashboard(self, job: dict, input_file: dict):
+    def render_dashboard(self, job: dict, input_file: dict, metadata: dict):
         import plotly.express as px
         import streamlit as st
 
