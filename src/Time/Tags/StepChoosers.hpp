@@ -4,6 +4,7 @@
 #pragma once
 
 #include <memory>
+#include <pup_stl.h>
 #include <vector>
 
 #include "DataStructures/DataBox/Tag.hpp"
@@ -20,6 +21,7 @@ struct StepChoosers : db::SimpleTag {
   using type =
       std::vector<std::unique_ptr<::StepChooser<StepChooserUse::LtsStep>>>;
   using option_tags = tmpl::list<::OptionTags::StepChoosers>;
+  static constexpr bool is_overlayable = true;
 
   static constexpr bool pass_metavariables = false;
   static type create_from_options(const type& step_choosers) {
