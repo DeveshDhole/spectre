@@ -332,8 +332,8 @@ Main<Metavariables>::Main(CkArgMsg* msg) {
     Overloader{
         [&command_line_options](std::true_type /*meta*/, auto mv,
                                 int /*gcc_bug*/)
-            -> std::void_t<decltype(
-                tmpl::type_from<decltype(mv)>::input_file)> {
+            -> std::void_t<
+                decltype(tmpl::type_from<decltype(mv)>::input_file)> {
           // Metavariables has options and default input file name
           command_line_options.add_options()(
               "input-file",
@@ -348,8 +348,8 @@ Main<Metavariables>::Main(CkArgMsg* msg) {
               "input-file", bpo::value<std::string>(), "Input file name");
         },
         [](std::false_type /*meta*/, auto mv, int /*gcc_bug*/)
-            -> std::void_t<decltype(
-                tmpl::type_from<decltype(mv)>::input_file)> {
+            -> std::void_t<
+                decltype(tmpl::type_from<decltype(mv)>::input_file)> {
           // Metavariables has no options and default input file name
 
           // always false, but must depend on mv
@@ -367,10 +367,10 @@ Main<Metavariables>::Main(CkArgMsg* msg) {
 
     const bool ignore_unrecognized_command_line_options = Overloader{
         [](auto mv, int /*gcc_bug*/)
-            -> decltype(tmpl::type_from<decltype(
-                            mv)>::ignore_unrecognized_command_line_options) {
-          return tmpl::type_from<decltype(
-              mv)>::ignore_unrecognized_command_line_options;
+            -> decltype(tmpl::type_from<decltype(mv)>::
+                            ignore_unrecognized_command_line_options) {
+          return tmpl::type_from<
+              decltype(mv)>::ignore_unrecognized_command_line_options;
         },
         [](auto /*mv*/, auto... /*meta*/) { return false; }}(
         tmpl::type_<Metavariables>{}, 0);
