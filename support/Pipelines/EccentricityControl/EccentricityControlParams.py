@@ -154,7 +154,7 @@ def eccentricity_control_params(
         mA = horizon_params["AhA ChristodoulouMass"].iloc[0]
         mB = horizon_params["AhB ChristodoulouMass"].iloc[0]
         if "AhA DimensionfulSpinVector_x" in horizon_params.columns:
-            sA = np.concat(
+            sA = np.array(
                 [horizon_params.index]
                 + [
                     horizon_params[f"AhA DimensionfulSpinVector_{xyz}"]
