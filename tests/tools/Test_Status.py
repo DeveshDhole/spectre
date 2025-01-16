@@ -120,7 +120,7 @@ class TestExecutableStatus(unittest.TestCase):
     def test_evolution_status(self):
         executable_status = match_executable_status("EvolveSomething")
         status = executable_status.status(self.input_file, self.work_dir)
-        self.assertEqual(status, {"Time": 2.0, "Speed": 2640.0})
+        self.assertEqual(status, {"Time": 2.0, "Speed": 2400.0})
         self.assertEqual(executable_status.format("Time", 1.5), "1.5")
         self.assertEqual(executable_status.format("Speed", 1.2), "1.2")
 
@@ -128,7 +128,7 @@ class TestExecutableStatus(unittest.TestCase):
         executable_status = match_executable_status("EvolveGhBinaryBlackHole")
         status = executable_status.status(self.input_file, self.work_dir)
         self.assertEqual(status["Time"], 2.0)
-        self.assertEqual(status["Speed"], 2640.0)
+        self.assertEqual(status["Speed"], 2400.0)
         self.assertEqual(status["Orbits"], 0.5)
         self.assertEqual(status["Separation"], 2.0)
         self.assertEqual(status["3-Index Constraint"], 1.0e-4)
@@ -137,7 +137,7 @@ class TestExecutableStatus(unittest.TestCase):
         executable_status = match_executable_status("EvolveGhSingleBlackHole")
         status = executable_status.status(self.input_file, self.work_dir)
         self.assertEqual(status["Time"], 2.0)
-        self.assertEqual(status["Speed"], 2640.0)
+        self.assertEqual(status["Speed"], 2400.0)
         self.assertEqual(status["Constraint Energy"], 1.0e-3)
 
     def test_elliptic_status(self):
