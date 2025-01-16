@@ -182,10 +182,12 @@ struct CreateElementCollection {
             }
             collection_ptr->at(element_id).set_core(core);
           }
-          ASSERT(*number_of_elements_terminated == collection_ptr->size(),
-                 "The number of elements inserted must match the number of "
-                 "elements set to terminate since the default state of an "
-                 "inserted element is terminated. This is a bug.");
+          if (*number_of_elements_terminated != collection_ptr->size()) {
+            ERROR(
+                "The number of elements inserted must match the number of "
+                "elements set to terminate since the default state of an "
+                "inserted element is terminated. This is a bug.");
+          }
         },
         make_not_null(&box));
 

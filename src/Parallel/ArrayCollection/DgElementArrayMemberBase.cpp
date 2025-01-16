@@ -113,6 +113,7 @@ void DgElementArrayMemberBase<Dim>::pup(PUP::er& p) {
   p | halt_algorithm_until_next_phase_;
   p | deadlock_analysis_next_iterable_action_;
   p | element_id_;
+  p | my_core_;
   if (p.isUnpacking()) {
     // Node locks are default-constructed, which is fine
     //
