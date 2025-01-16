@@ -3,6 +3,8 @@
 
 #pragma once
 
+#include <cstddef>
+
 #include "DataStructures/DataBox/DataBox.hpp"
 #include "DataStructures/Variables.hpp"
 #include "DataStructures/VariablesTag.hpp"
@@ -177,9 +179,11 @@ void try_to_interpolate(
 
   // Send interpolated data only if interpolation has been done on all
   // of the local elements.
-  const auto& num_elements = db::get<Tags::NumberOfElements>(*box);
+  const auto& num_elements =
+      db::get<Tags::NumberOfElements<Metavariables::volume_dim>>(*box);
   if (vars_infos.at(temporal_id)
-          .interpolation_is_done_for_these_elements.size() == num_elements) {
+          .interpolation_is_done_for_these_elements.size() ==
+      num_elements.size()) {
     // Send data to InterpolationTarget, but only if the list of points is
     // non-empty.
     if (not vars_infos.at(temporal_id).global_offsets.empty()) {

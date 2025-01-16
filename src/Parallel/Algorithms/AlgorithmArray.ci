@@ -69,7 +69,7 @@ module AlgorithmArray {
 
     entry void perform_algorithm(bool);
 
-    entry void start_phase(Parallel::Phase);
+    entry void start_phase(Parallel::Phase, bool force = false);
 
     template <typename ReceiveTag, typename MessageType>
     entry void receive_data(MessageType*);

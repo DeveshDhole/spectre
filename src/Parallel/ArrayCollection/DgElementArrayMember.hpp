@@ -122,7 +122,13 @@ class DgElementArrayMember<Dim, Metavariables,
   /// Start execution of the phase-dependent action list in `next_phase`. If
   /// `next_phase` has already been visited, execution will resume at the point
   /// where the previous execution of the same phase left off.
-  void start_phase(Parallel::Phase next_phase) override;
+  ///
+  /// If \p force is true, then regardless of how this component terminated
+  /// (error or deadlock), it will resume.
+  ///
+  /// \warning Don't set \p force to true unless you are absolutely sure you
+  /// want to. This can have very unintended consequences if used incorrectly.
+  void start_phase(Parallel::Phase next_phase, bool force = false) override;
 
   const auto& databox() const { return box_; }
 
@@ -227,9 +233,17 @@ template <size_t Dim, typename Metavariables,
           typename... PhaseDepActionListsPack, typename SimpleTagsFromOptions>
 void DgElementArrayMember<
     Dim, Metavariables, tmpl::list<PhaseDepActionListsPack...>,
-    SimpleTagsFromOptions>::start_phase(const Parallel::Phase next_phase) {
+    SimpleTagsFromOptions>::start_phase(const Parallel::Phase next_phase,
+                                        const bool force) {
   try {
+    auto& cache = *Parallel::local_branch(global_cache_proxy_);
     // terminate should be true since we exited a phase previously.
+    if (force) {
+      Parallel::local_synchronous_action<
+          Parallel::Actions::SetTerminateOnElement>(
+          Parallel::get_parallel_component<ParallelComponent>(cache),
+          make_not_null(&cache), this->element_id_, true);
+    }
     if (not this->get_terminate() and
         not this->halt_algorithm_until_next_phase_) {
       ERROR(
@@ -243,7 +257,6 @@ void DgElementArrayMember<
           << this->element_id_);
     }
     // set terminate to true if there are no actions in this PDAL
-    auto& cache = *Parallel::local_branch(global_cache_proxy_);
     Parallel::local_synchronous_action<
         Parallel::Actions::SetTerminateOnElement>(
         Parallel::get_parallel_component<ParallelComponent>(cache),

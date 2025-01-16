@@ -196,6 +196,7 @@ struct mock_interpolator {
       Parallel::PhaseActions<
           Parallel::Phase::Initialization,
           tmpl::list<::intrp::Actions::InitializeInterpolator<
+              metavariables::volume_dim,
               intrp::Tags::VolumeVarsInfo<Metavariables, ::Tags::TimeStepId>,
               intrp::Tags::InterpolatedVarsHolders<Metavariables>>>>,
       Parallel::PhaseActions<Parallel::Phase::Testing, tmpl::list<>>>;
@@ -287,7 +288,7 @@ SPECTRE_TEST_CASE("Unit.NumericalAlgorithms.Interpolator.ReceivePoints",
   for (size_t array_index = 0; array_index < 2; array_index++) {
     for (size_t num_elements = 0; num_elements < 4; num_elements++) {
       runner.simple_action<interp_component, ::intrp::Actions::RegisterElement>(
-          array_index);
+          array_index, element_ids[array_index + num_elements * 2]);
     }
   }
 

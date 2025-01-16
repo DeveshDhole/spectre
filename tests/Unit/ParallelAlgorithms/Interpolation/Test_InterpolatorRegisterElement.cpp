@@ -5,12 +5,14 @@
 
 #include <cstddef>
 
+#include "Domain/Structure/ElementId.hpp"
 #include "Framework/ActionTesting.hpp"
 #include "Parallel/Phase.hpp"
 #include "Parallel/PhaseDependentActionList.hpp"
 #include "ParallelAlgorithms/Interpolation/Actions/InitializeInterpolator.hpp"
 #include "ParallelAlgorithms/Interpolation/Actions/InterpolatorRegisterElement.hpp"
 #include "ParallelAlgorithms/Interpolation/InterpolatedVars.hpp"
+#include "ParallelAlgorithms/Interpolation/Tags.hpp"
 #include "PointwiseFunctions/GeneralRelativity/Tags.hpp"
 #include "Time/Tags/TimeStepId.hpp"
 #include "Utilities/Gsl.hpp"
@@ -18,6 +20,7 @@
 
 class DataVector;
 namespace intrp::Tags {
+template <size_t Dim>
 struct NumberOfElements;
 }  // namespace intrp::Tags
 
@@ -32,11 +35,13 @@ struct mock_interpolator {
       Parallel::PhaseActions<
           Parallel::Phase::Initialization,
           tmpl::list<::intrp::Actions::InitializeInterpolator<
+              metavariables::volume_dim,
               intrp::Tags::VolumeVarsInfo<Metavariables, ::Tags::TimeStepId>,
               intrp::Tags::InterpolatedVarsHolders<Metavariables>>>>,
       Parallel::PhaseActions<Parallel::Phase::Register, tmpl::list<>>>;
   using initial_databox = db::compute_databox_type<
       typename ::intrp::Actions::InitializeInterpolator<
+          metavariables::volume_dim,
           intrp::Tags::VolumeVarsInfo<Metavariables, ::Tags::TimeStepId>,
           intrp::Tags::InterpolatedVarsHolders<Metavariables>>::
           return_tag_list>;
@@ -47,7 +52,7 @@ template <typename Metavariables>
 struct mock_element {
   using metavariables = Metavariables;
   using chare_type = ActionTesting::MockArrayChare;
-  using array_index = size_t;
+  using array_index = ElementId<Metavariables::volume_dim>;
   using phase_dependent_action_list = tmpl::list<
       Parallel::PhaseActions<Parallel::Phase::Initialization, tmpl::list<>>,
       Parallel::PhaseActions<
@@ -74,6 +79,7 @@ struct MockMetavariables {
 SPECTRE_TEST_CASE("Unit.NumericalAlgorithms.Interpolator.RegisterElement",
                   "[Unit]") {
   using metavars = MockMetavariables;
+  constexpr size_t Dim = metavars::volume_dim;
   using interp_component = mock_interpolator<metavars>;
   using elem_component = mock_element<metavars>;
   ActionTesting::MockRuntimeSystem<metavars> runner{{}};
@@ -83,67 +89,71 @@ SPECTRE_TEST_CASE("Unit.NumericalAlgorithms.Interpolator.RegisterElement",
   for (size_t i = 0; i < 2; ++i) {
     ActionTesting::next_action<interp_component>(make_not_null(&runner), 0);
   }
-  ActionTesting::emplace_component<elem_component>(&runner, 0);
+  for (size_t i = 0; i < 3; i++) {
+    ActionTesting::emplace_component<elem_component>(&runner,
+                                                     ElementId<Dim>{i});
+  }
+  const ElementId<Dim> id_0{0};
+  const ElementId<Dim> id_1{1};
+  const ElementId<Dim> id_2{2};
   // There is no next_action on elem_component, so we don't call it here.
   ActionTesting::set_phase(make_not_null(&runner), Parallel::Phase::Register);
 
-  CHECK(ActionTesting::get_databox_tag<interp_component,
-                                       ::intrp::Tags::NumberOfElements>(
-            runner, 0) == 0);
+  const auto& number_of_elements =
+      ActionTesting::get_databox_tag<interp_component,
+                                     ::intrp::Tags::NumberOfElements<Dim>>(
+          runner, 0);
 
-  runner.simple_action<interp_component, ::intrp::Actions::RegisterElement>(0);
+  CHECK(number_of_elements.empty());
 
-  CHECK(ActionTesting::get_databox_tag<interp_component,
-                                       ::intrp::Tags::NumberOfElements>(
-            runner, 0) == 1);
+  runner.simple_action<interp_component, ::intrp::Actions::RegisterElement>(
+      0, id_0);
 
-  runner.simple_action<interp_component, ::intrp::Actions::RegisterElement>(0);
+  CHECK(number_of_elements.size() == 1);
+  CHECK(number_of_elements.contains(id_0));
 
-  CHECK(ActionTesting::get_databox_tag<interp_component,
-                                       ::intrp::Tags::NumberOfElements>(
-            runner, 0) == 2);
+  runner.simple_action<interp_component, ::intrp::Actions::RegisterElement>(
+      0, id_1);
+
+  CHECK(number_of_elements.size() == 2);
+  CHECK(number_of_elements.contains(id_1));
 
   // Call RegisterElementWithInterpolator from element, check if
   // it gets registered.
-  ActionTesting::next_action<elem_component>(make_not_null(&runner), 0);
+  ActionTesting::next_action<elem_component>(make_not_null(&runner), id_2);
   ActionTesting::set_phase(make_not_null(&runner), Parallel::Phase::Testing);
 
   runner.invoke_queued_simple_action<interp_component>(0);
 
-  CHECK(ActionTesting::get_databox_tag<interp_component,
-                                       ::intrp::Tags::NumberOfElements>(
-            runner, 0) == 3);
+  CHECK(number_of_elements.size() == 3);
+  CHECK(number_of_elements.contains(id_2));
 
   // No more queued simple actions.
   CHECK(runner.is_simple_action_queue_empty<interp_component>(0));
-  CHECK(runner.is_simple_action_queue_empty<elem_component>(0));
+  CHECK(runner.is_simple_action_queue_empty<elem_component>(id_0));
 
   {
     INFO("Deregistration");
     intrp::Actions::RegisterElementWithInterpolator::
         template perform_deregistration<elem_component>(
             ActionTesting::get_databox<elem_component>(make_not_null(&runner),
-                                                       0_st),
-            ActionTesting::cache<elem_component>(runner, 0_st), 0_st);
+                                                       id_0),
+            ActionTesting::cache<elem_component>(runner, id_0), id_0);
     ActionTesting::invoke_queued_simple_action<interp_component>(
         make_not_null(&runner), 0);
     // No more queued simple actions.
     CHECK(runner.is_simple_action_queue_empty<interp_component>(0));
-    CHECK(runner.is_simple_action_queue_empty<elem_component>(0));
+    CHECK(runner.is_simple_action_queue_empty<elem_component>(id_0));
 
-    CHECK(ActionTesting::get_databox_tag<interp_component,
-          ::intrp::Tags::NumberOfElements>(
-               runner, 0) == 2);
+    CHECK(number_of_elements.size() == 2);
+    CHECK_FALSE(number_of_elements.contains(id_0));
     runner.simple_action<interp_component, ::intrp::Actions::DeregisterElement>(
-        0);
-    CHECK(ActionTesting::get_databox_tag<interp_component,
-          ::intrp::Tags::NumberOfElements>(
-               runner, 0) == 1);
+        0, id_1);
+    CHECK(number_of_elements.size() == 1);
+    CHECK_FALSE(number_of_elements.contains(id_1));
     runner.simple_action<interp_component, ::intrp::Actions::DeregisterElement>(
-        0);
-    CHECK(ActionTesting::get_databox_tag<interp_component,
-                                         ::intrp::Tags::NumberOfElements>(
-              runner, 0) == 0);
+        0, id_2);
+    CHECK(number_of_elements.empty());
   }
 }
 

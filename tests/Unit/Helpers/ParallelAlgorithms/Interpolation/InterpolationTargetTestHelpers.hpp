@@ -46,6 +46,7 @@ struct ReceivePoints;
 namespace Tags {
 template <typename TemporalId>
 struct InterpolatedVarsHolders;
+template <size_t Dim>
 struct NumberOfElements;
 }  // namespace Tags
 }  // namespace intrp
@@ -79,11 +80,10 @@ struct mock_interpolation_target {
 
 template <typename InterpolationTargetTag>
 struct MockReceivePoints {
-  template <
-      typename ParallelComponent, typename DbTags, typename Metavariables,
-      typename ArrayIndex, size_t VolumeDim,
-      Requires<tmpl::list_contains_v<DbTags, ::intrp::Tags::NumberOfElements>> =
-          nullptr>
+  template <typename ParallelComponent, typename DbTags, typename Metavariables,
+            typename ArrayIndex, size_t VolumeDim,
+            Requires<tmpl::list_contains_v<
+                DbTags, ::intrp::Tags::NumberOfElements<VolumeDim>>> = nullptr>
   static void apply(
       db::DataBox<DbTags>& box, Parallel::GlobalCache<Metavariables>& /*cache*/,
       const ArrayIndex& /*array_index*/,
@@ -120,6 +120,7 @@ struct mock_interpolator {
       Parallel::PhaseActions<
           Parallel::Phase::Initialization,
           tmpl::list<intrp::Actions::InitializeInterpolator<
+              metavariables::volume_dim,
               intrp::Tags::VolumeVarsInfo<
                   Metavariables,
                   typename Metavariables::InterpolationTargetA::temporal_id>,

@@ -281,6 +281,14 @@ EventsAndDenseTriggers:
     Events:
       - BondiSachsInterpolation
 
+EventsRunAtCleanup:
+  ObservationValue: -1000.0
+  Events:
+    - ObserveTimeStepVolume:
+        SubfileName: FailureTimeStep
+        FloatingPointType: Double
+        CoordinatesFloatingPointType: Float
+
 Interpolator:
   DumpVolumeDataOnFailure: false
 

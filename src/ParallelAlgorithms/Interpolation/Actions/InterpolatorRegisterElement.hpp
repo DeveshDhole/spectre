@@ -3,12 +3,14 @@
 
 #pragma once
 
+#include <cstddef>
 #include <optional>
 
 #include "DataStructures/DataBox/DataBox.hpp"
 #include "Parallel/AlgorithmExecution.hpp"
 #include "Parallel/ArrayCollection/IsDgElementCollection.hpp"
 #include "Parallel/GlobalCache.hpp"
+#include "Parallel/Info.hpp"
 #include "Parallel/Invoke.hpp"
 #include "Parallel/Local.hpp"
 #include "Parallel/Protocols/ElementRegistrar.hpp"
@@ -52,10 +54,20 @@ struct RegisterElement {
   template <typename ParallelComponent, typename DbTags, typename Metavariables,
             typename ArrayIndex>
   static void apply(db::DataBox<DbTags>& box,
-                    const Parallel::GlobalCache<Metavariables>& /*cache*/,
-                    const ArrayIndex& /*array_index*/) {
-    db::mutate<Tags::NumberOfElements>(
-        [](const gsl::not_null<size_t*> num_elements) { ++(*num_elements); },
+                    const Parallel::GlobalCache<Metavariables>& cache,
+                    const ArrayIndex& /*array_index*/,
+                    const ElementId<Metavariables::volume_dim>& element_id) {
+    db::mutate<Tags::NumberOfElements<Metavariables::volume_dim>>(
+        [&](const gsl::not_null<
+            std::unordered_set<ElementId<Metavariables::volume_dim>>*>
+                num_elements) {
+          auto inserted = num_elements->insert(element_id);
+          if (not inserted.second) {
+            ERROR("Unable to insert element "
+                  << element_id << " into interpolator core "
+                  << Parallel::my_proc<size_t>(cache));
+          }
+        },
         make_not_null(&box));
   }
 };
@@ -79,10 +91,20 @@ struct DeregisterElement {
   template <typename ParallelComponent, typename DbTags, typename Metavariables,
             typename ArrayIndex>
   static void apply(db::DataBox<DbTags>& box,
-                    const Parallel::GlobalCache<Metavariables>& /*cache*/,
-                    const ArrayIndex& /*array_index*/) {
-    db::mutate<Tags::NumberOfElements>(
-        [](const gsl::not_null<size_t*> num_elements) { --(*num_elements); },
+                    const Parallel::GlobalCache<Metavariables>& cache,
+                    const ArrayIndex& /*array_index*/,
+                    const ElementId<Metavariables::volume_dim>& element_id) {
+    db::mutate<Tags::NumberOfElements<Metavariables::volume_dim>>(
+        [&](const gsl::not_null<
+            std::unordered_set<ElementId<Metavariables::volume_dim>>*>
+                num_elements) {
+          const size_t num_elements_removed = num_elements->erase(element_id);
+          if (num_elements_removed == 0) {
+            ERROR("Unable to remove element "
+                  << element_id << " from interpolator core "
+                  << Parallel::my_proc<size_t>(cache));
+          }
+        },
         make_not_null(&box));
   }
 };
@@ -124,12 +146,14 @@ struct RegisterElementWithInterpolator
               .get_core());
       auto interpolator = Parallel::get_parallel_component<
           ::intrp::Interpolator<Metavariables>>(cache)[core_id];
-      Parallel::simple_action<RegisterOrDeregisterAction>(interpolator);
+      Parallel::simple_action<RegisterOrDeregisterAction>(interpolator,
+                                                          array_index);
     } else {
       auto& interpolator =
           *Parallel::local_branch(Parallel::get_parallel_component<
                                   ::intrp::Interpolator<Metavariables>>(cache));
-      Parallel::simple_action<RegisterOrDeregisterAction>(interpolator);
+      Parallel::simple_action<RegisterOrDeregisterAction>(interpolator,
+                                                          array_index);
     }
   }
 

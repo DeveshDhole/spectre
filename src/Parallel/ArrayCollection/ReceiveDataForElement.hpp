@@ -89,7 +89,12 @@ struct ReceiveDataForElement {
                           << Parallel::my_node<size_t>(cache););
       auto& element = element_collection->at(element_to_execute_on);
       const std::lock_guard element_lock(element.element_lock());
-      element.start_phase(current_phase);
+      // We always force the phase to start because if a previous phase
+      // terminated properly, then this does nothing. But if a phase didn't
+      // terminate properly, then it likely went into deadlock analysis or
+      // post-failure cleanup, in which case we want to run code after a
+      // failure, so we must force the phase to start.
+      element.start_phase(current_phase, true);
     } else {
       auto& element = element_collection->at(element_to_execute_on);
       std::unique_lock element_lock(element.element_lock(), std::defer_lock);

@@ -10,6 +10,7 @@ spectre_target_headers(
   INCLUDE_DIRECTORY ${CMAKE_SOURCE_DIR}/src
   HEADERS
   PrintDgElementArray.hpp
+  PrintFunctionsOfTime.hpp
   )
 
 target_link_libraries(
@@ -17,6 +18,7 @@ target_link_libraries(
   INTERFACE
   DataStructures
   DiscontinuousGalerkin
+  FunctionsOfTime
   Parallel
   Printf
   Time

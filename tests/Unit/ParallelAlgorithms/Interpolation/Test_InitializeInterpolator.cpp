@@ -32,6 +32,7 @@ struct mock_interpolator {
   using phase_dependent_action_list = tmpl::list<Parallel::PhaseActions<
       Parallel::Phase::Initialization,
       tmpl::list<intrp::Actions::InitializeInterpolator<
+          Metavariables::volume_dim,
           tmpl::list<
               intrp::Tags::VolumeVarsInfo<Metavariables, ::Tags::Time>,
               intrp::Tags::VolumeVarsInfo<Metavariables, ::Tags::TimeStepId>>,
@@ -64,9 +65,10 @@ SPECTRE_TEST_CASE("Unit.NumericalAlgorithms.Interpolator.Initialize",
   }
   ActionTesting::set_phase(make_not_null(&runner), Parallel::Phase::Testing);
 
-  CHECK(ActionTesting::get_databox_tag<component,
-                                       ::intrp::Tags::NumberOfElements>(
-            runner, 0) == 0);
+  CHECK(ActionTesting::get_databox_tag<
+            component, ::intrp::Tags::NumberOfElements<metavars::volume_dim>>(
+            runner, 0)
+            .empty());
   CHECK(ActionTesting::get_databox_tag<
             component, ::intrp::Tags::VolumeVarsInfo<metavars, ::Tags::Time>>(
             runner, 0)

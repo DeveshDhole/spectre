@@ -409,6 +409,7 @@ struct MockInterpolator {
       Parallel::PhaseActions<
           Parallel::Phase::Initialization,
           tmpl::list<::intrp::Actions::InitializeInterpolator<
+              metavariables::volume_dim,
               tmpl::list<
                   intrp::Tags::VolumeVarsInfo<Metavariables,
                                               ::Tags::TimeStepId>,
@@ -687,7 +688,7 @@ void run_test() {
     mock_core_for_each_element.insert({element_id, core_for_next_element});
     ActionTesting::simple_action<interp_component,
                                  intrp::Actions::RegisterElement>(
-        make_not_null(&runner), core_for_next_element);
+        make_not_null(&runner), core_for_next_element, element_id);
     if (++core_for_next_element >= num_cores) {
       core_for_next_element = 0;
     }
