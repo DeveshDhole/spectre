@@ -8,7 +8,6 @@
 
 #include "ControlSystem/Actions/InitializeMeasurements.hpp"
 #include "ControlSystem/Actions/LimitTimeStep.hpp"
-#include "ControlSystem/Actions/PrintCurrentMeasurement.hpp"
 #include "ControlSystem/Component.hpp"
 #include "ControlSystem/ControlErrors/Size/Factory.hpp"
 #include "ControlSystem/ControlErrors/Size/State.hpp"
@@ -25,19 +24,17 @@
 #include "DataStructures/Tensor/EagerMath/RaiseOrLowerIndex.hpp"
 #include "Domain/Creators/BinaryCompactObject.hpp"
 #include "Domain/Creators/CylindricalBinaryCompactObject.hpp"
-#include "Domain/FunctionsOfTime/OutputTimeBounds.hpp"
-#include "Domain/FunctionsOfTime/Tags.hpp"
 #include "Domain/Tags.hpp"
 #include "Domain/TagsCharacteristicSpeeds.hpp"
 #include "Evolution/Actions/RunEventsAndDenseTriggers.hpp"
 #include "Evolution/Actions/RunEventsAndTriggers.hpp"
 #include "Evolution/ComputeTags.hpp"
-#include "Evolution/Deadlock/PrintDgElementArray.hpp"
 #include "Evolution/DiscontinuousGalerkin/Actions/ApplyBoundaryCorrections.hpp"
 #include "Evolution/DiscontinuousGalerkin/Actions/ComputeTimeDerivative.hpp"
 #include "Evolution/DiscontinuousGalerkin/DgElementArray.hpp"
 #include "Evolution/DiscontinuousGalerkin/InboxTags.hpp"
 #include "Evolution/DiscontinuousGalerkin/Initialization/Mortars.hpp"
+#include "Evolution/Executables/GeneralizedHarmonic/Deadlock.hpp"
 #include "Evolution/Initialization/DgDomain.hpp"
 #include "Evolution/Initialization/Evolution.hpp"
 #include "Evolution/Initialization/NonconservativeSystem.hpp"
@@ -75,7 +72,6 @@
 #include "Options/String.hpp"
 #include "Parallel/Algorithms/AlgorithmSingleton.hpp"
 #include "Parallel/ArrayCollection/DgElementCollection.hpp"
-#include "Parallel/ArrayCollection/IsDgElementCollection.hpp"
 #include "Parallel/ArrayCollection/SimpleActionOnElement.hpp"
 #include "Parallel/GlobalCache.hpp"
 #include "Parallel/Invoke.hpp"
@@ -87,7 +83,6 @@
 #include "Parallel/PhaseControl/Factory.hpp"
 #include "Parallel/PhaseControl/VisitAndReturn.hpp"
 #include "Parallel/PhaseDependentActionList.hpp"
-#include "Parallel/Printf/Printf.hpp"
 #include "Parallel/Protocols/RegistrationMetavariables.hpp"
 #include "Parallel/Reduction.hpp"
 #include "ParallelAlgorithms/Actions/AddComputeTags.hpp"
@@ -652,32 +647,9 @@ struct EvolutionMetavars {
   static void run_deadlock_analysis_simple_actions(
       Parallel::GlobalCache<EvolutionMetavars>& cache,
       const std::vector<std::string>& deadlocked_components) {
-    const auto& functions_of_time =
-        Parallel::get<::domain::Tags::FunctionsOfTime>(cache);
-
-    const std::string time_bounds =
-        ::domain::FunctionsOfTime::output_time_bounds(functions_of_time);
-
-    Parallel::printf("%s\n", time_bounds);
-
-    if (alg::count(deadlocked_components,
-                   pretty_type::name<gh_dg_element_array>()) == 1) {
-      tmpl::for_each<control_components>([&cache](auto component_v) {
-        using component = tmpl::type_from<decltype(component_v)>;
-        Parallel::simple_action<
-            control_system::Actions::PrintCurrentMeasurement>(
-            Parallel::get_parallel_component<component>(cache));
-      });
-
-      if constexpr (Parallel::is_dg_element_collection_v<gh_dg_element_array>) {
-        Parallel::threaded_action<Parallel::Actions::SimpleActionOnElement<
-            deadlock::PrintElementInfo, true>>(
-            Parallel::get_parallel_component<gh_dg_element_array>(cache));
-      } else {
-        Parallel::simple_action<deadlock::PrintElementInfo>(
-            Parallel::get_parallel_component<gh_dg_element_array>(cache));
-      }
-    }
+    gh::deadlock::run_deadlock_analysis_simple_actions<gh_dg_element_array,
+                                                       control_components>(
+        cache, deadlocked_components);
   }
 
   struct amr : tt::ConformsTo<::amr::protocols::AmrMetavariables> {

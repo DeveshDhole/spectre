@@ -8,7 +8,6 @@
 #include <vector>
 
 #include "ControlSystem/Actions/InitializeMeasurements.hpp"
-#include "ControlSystem/Actions/PrintCurrentMeasurement.hpp"
 #include "ControlSystem/Component.hpp"
 #include "ControlSystem/ControlErrors/Size/Factory.hpp"
 #include "ControlSystem/ControlErrors/Size/State.hpp"
@@ -18,12 +17,10 @@
 #include "ControlSystem/Systems/Size.hpp"
 #include "ControlSystem/Systems/Translation.hpp"
 #include "ControlSystem/Trigger.hpp"
-#include "Domain/FunctionsOfTime/OutputTimeBounds.hpp"
-#include "Domain/FunctionsOfTime/Tags.hpp"
 #include "Domain/Structure/ObjectLabel.hpp"
 #include "Evolution/Actions/RunEventsAndTriggers.hpp"
-#include "Evolution/Deadlock/PrintDgElementArray.hpp"
 #include "Evolution/DiscontinuousGalerkin/InboxTags.hpp"
+#include "Evolution/Executables/GeneralizedHarmonic/Deadlock.hpp"
 #include "Evolution/Executables/GeneralizedHarmonic/GeneralizedHarmonicBase.hpp"
 #include "Evolution/Systems/Cce/Callbacks/DumpBondiSachsOnWorldtube.hpp"
 #include "Evolution/Systems/GeneralizedHarmonic/Actions/SetInitialData.hpp"
@@ -35,7 +32,6 @@
 #include "Parallel/Invoke.hpp"
 #include "Parallel/MemoryMonitor/MemoryMonitor.hpp"
 #include "Parallel/PhaseControl/ExecutePhaseChange.hpp"
-#include "Parallel/Printf/Printf.hpp"
 #include "Parallel/Protocols/RegistrationMetavariables.hpp"
 #include "ParallelAlgorithms/Actions/FunctionsOfTimeAreReady.hpp"
 #include "ParallelAlgorithms/Amr/Projectors/CopyFromCreatorOrLeaveAsIs.hpp"
@@ -307,32 +303,9 @@ struct EvolutionMetavars : public GeneralizedHarmonicTemplateBase<3, UseLts> {
   static void run_deadlock_analysis_simple_actions(
       Parallel::GlobalCache<EvolutionMetavars>& cache,
       const std::vector<std::string>& deadlocked_components) {
-    const auto& functions_of_time =
-        Parallel::get<::domain::Tags::FunctionsOfTime>(cache);
-
-    const std::string time_bounds =
-        ::domain::FunctionsOfTime::output_time_bounds(functions_of_time);
-
-    Parallel::printf("%s\n", time_bounds);
-
-    if (alg::count(deadlocked_components,
-                   pretty_type::name<gh_dg_element_array>()) == 1) {
-      tmpl::for_each<control_components>([&cache](auto component_v) {
-        using component = tmpl::type_from<decltype(component_v)>;
-        Parallel::simple_action<
-            control_system::Actions::PrintCurrentMeasurement>(
-            Parallel::get_parallel_component<component>(cache));
-      });
-
-      if constexpr (Parallel::is_dg_element_collection_v<gh_dg_element_array>) {
-        Parallel::threaded_action<Parallel::Actions::SimpleActionOnElement<
-            deadlock::PrintElementInfo, true>>(
-            Parallel::get_parallel_component<gh_dg_element_array>(cache));
-      } else {
-        Parallel::simple_action<deadlock::PrintElementInfo>(
-            Parallel::get_parallel_component<gh_dg_element_array>(cache));
-      }
-    }
+    gh::deadlock::run_deadlock_analysis_simple_actions<gh_dg_element_array,
+                                                       control_components>(
+        cache, deadlocked_components);
   }
 
   using component_list = tmpl::flatten<tmpl::list<
