@@ -160,6 +160,54 @@ enum class SchwarzschildCoordinates {
    * \end{equation}
    */
   KerrSchildIsotropic,
+  /*!
+   * \brief Maximal Isotropic (Horizon Penetrating) Schwarzschild coordinates
+   *
+   * Schwarzschild coordinates with a radial transformation such that the radius
+   * is isotropic and the coordinates are horizon penetrating.
+   *
+   * These arise from first choosing a family of time-independent, maximal
+   * slicings of the Schwarzschild spacetime and a slicing condition that give a
+   * unique solution with a limiting surface at \f$R=3M/2\f$ and horizon at
+   * \f$R=2M\f$ \cite Estabrook1973ue. The latter is then changed by the radial
+   * transformation \cite Baumgarte2007ht
+   *
+   * \f{equation}
+   *  r = \frac{\left[2R + M + \sqrt{4R^2 + 4MR + 3M^2}\right]}{4}
+   *  \times \left[
+   *  \frac{(4 + 3\sqrt{2})(2R - 3M)}{8R + 6M + 3\sqrt{8R^2 + 8MR + 6M^2}}
+   *  \right]^{1/\sqrt{2}}
+   * \f}
+   *
+   * where \f$R\f$ is the canonical
+   * Schwarzschild radius, also referred to as "areal" radius because it is
+   * defined such that spheres with constant \f$R\f$ have the area \f$4\pi
+   * R^2\f$, and \f$r\f$ is the "isotropic" radius. In the isotropic
+   * radius the Schwarzschild spatial metric is conformally flat:
+   *
+   * \f{equation}
+   * \gamma_{ij}=\psi^4\eta_{ij} \quad \text{with conformal factor} \quad
+   * \psi=\sqrt{\frac{R}{r}}.
+   * \f}
+   *
+   * The lapse in the conformal radius is
+   *
+   * \f{equation}
+   * \alpha = \left(1 - \frac{2M}{R} + \frac{27M^4}{16R^4} \right)^{1/2}
+   * \f}
+   *
+   * and the shift is given by
+   *
+   * \f{equation}
+   * \beta^r = \frac{3 \sqrt{3} M^2}{4} \frac{r}{R^3}
+   * \f}
+   *
+   * The solution remains maximally sliced, i.e. \f$K=0\f$. And the horizon in
+   * these coordinates is at \f$r\approx 0.7793271080557972 M\f$ due to the
+   * radial transformation from \f$R=2M\f$.
+   *
+   */
+  MaximalIsotropic,
 };
 
 std::ostream& operator<<(std::ostream& os, SchwarzschildCoordinates coords);
