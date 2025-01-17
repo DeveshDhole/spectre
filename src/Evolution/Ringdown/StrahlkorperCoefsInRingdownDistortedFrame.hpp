@@ -37,7 +37,12 @@ std::vector<DataVector> strahlkorper_coefs_in_ringdown_distorted_frame(
     const std::string& surface_subfile_name,
     size_t requested_number_of_times_from_end, double match_time,
     double settling_timescale,
-    const std::array<double, 3>& exp_func_and_2_derivs,
-    const std::array<double, 3>& exp_outer_bdry_func_and_2_derivs,
-    const std::vector<std::array<double, 4>>& rot_func_and_2_derivs);
+    const std::optional<std::array<double, 3>>& exp_func_and_2_derivs =
+        std::nullopt,
+    const std::optional<std::array<double, 3>>&
+        exp_outer_bdry_func_and_2_derivs = std::nullopt,
+    const std::optional<std::vector<std::array<double, 4>>>&
+        rot_func_and_2_derivs = std::nullopt,
+    const std::optional<std::array<std::array<double, 3>, 3>>&
+        trans_func_and_2_derivs = std::nullopt);
 }  // namespace evolution::Ringdown

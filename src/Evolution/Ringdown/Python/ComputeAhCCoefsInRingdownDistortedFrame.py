@@ -70,9 +70,7 @@ def fit_to_a_cubic(times, coefs, match_time, zero_coefs_eps):
 def compute_ahc_coefs_in_ringdown_distorted_frame(
     ahc_reductions_path,
     ahc_subfile,
-    exp_func_and_2_derivs,
-    exp_outer_bdry_func_and_2_derivs,
-    rot_func_and_2_derivs,
+    evaluated_fot_dict,
     number_of_ahc_finds_for_fit,
     match_time,
     settling_timescale,
@@ -119,9 +117,10 @@ def compute_ahc_coefs_in_ringdown_distorted_frame(
             number_of_ahc_finds_for_fit,
             match_time,
             settling_timescale,
-            exp_func_and_2_derivs,
-            exp_outer_bdry_func_and_2_derivs,
-            rot_func_and_2_derivs,
+            evaluated_fot_dict["Expansion"],
+            evaluated_fot_dict["ExpansionOuterBoundary"],
+            evaluated_fot_dict["Rotation"],
+            None,
         )
     )
 
@@ -151,24 +150,24 @@ def compute_ahc_coefs_in_ringdown_distorted_frame(
             -number_of_ahc_finds_for_fit:
         ]
 
-    logger.info("AhC times available: " + str(ahc_times.shape[0]))
-    logger.info(
+    logger.debug("AhC times available: " + str(ahc_times.shape[0]))
+    logger.debug(
         "AhC available time range: "
         + str(np.min(ahc_times))
         + " - "
         + str(np.max(ahc_times))
     )
-    logger.info("AhC times used: " + str(ahc_times_for_fit.shape[0]))
-    logger.info(
+    logger.debug("AhC times used: " + str(ahc_times_for_fit.shape[0]))
+    logger.debug(
         "AhC used time range: "
         + str(np.min(ahc_times_for_fit))
         + " - "
         + str(np.max(ahc_times_for_fit))
     )
-    logger.info(
+    logger.debug(
         "Coef times available: " + str(coefs_at_different_times.shape[0])
     )
-    logger.info(
+    logger.debug(
         "Coef times used: " + str(coefs_at_different_times_for_fit.shape[0])
     )
 

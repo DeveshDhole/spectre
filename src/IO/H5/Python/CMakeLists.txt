@@ -22,6 +22,7 @@ spectre_python_add_module(
   ExtendConnectivityData.py
   ExtractDatFromH5.py
   ExtractInputSourceYamlFromH5.py
+  FunctionsOfTimeFromVolume.py
   IterElements.py
   MODULE_PATH "IO"
   )
