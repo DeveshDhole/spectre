@@ -586,9 +586,9 @@ jobs:
           rm cmake-install.sh
       - name: Install Python version
         if: matrix.PYTHON_VERSION
-        uses: actions/setup-python@v5
-        with:
-          python-version: ${{ matrix.PYTHON_VERSION }}
+        run: |
+          add-apt-repository ppa:deadsnakes/ppa
+          apt install -y python${{ matrix.PYTHON_VERSION }}
       - name: Install Python dependencies
         if: matrix.PYTHON_VERSION
         run: |
