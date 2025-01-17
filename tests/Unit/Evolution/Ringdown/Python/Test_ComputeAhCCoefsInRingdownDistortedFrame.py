@@ -76,9 +76,10 @@ class TestComputeAhCCoefs(unittest.TestCase):
                 )
             reduction_file.close_current_object()
 
-        exp_inner_func_with_2_derivs = [1.0, 0.0, 0.0]
-        exp_outer_boundary_func_with_2_derivs = [1.0, -1e-6, 0.0]
-        rot_func_with_2_derivs = [
+        fot_dict = {}
+        fot_dict["Expansion"] = [1.0, 0.0, 0.0]
+        fot_dict["ExpansionOuterBoundary"] = [1.0, -1e-6, 0.0]
+        fot_dict["Rotation"] = [
             [0.0, 0.0, 0.0, 1.0],
             [0.15, 0.0, 0.0, 0.02],
             [0.06, 0.0, 0.0, 0.03],
@@ -87,11 +88,7 @@ class TestComputeAhCCoefs(unittest.TestCase):
             compute_ahc_coefs_in_ringdown_distorted_frame(
                 ahc_reductions_path=str(self.inspiral_reduction_data),
                 ahc_subfile="ObservationAhC_Ylm.dat",
-                exp_func_and_2_derivs=exp_inner_func_with_2_derivs,
-                exp_outer_bdry_func_and_2_derivs=(
-                    exp_outer_boundary_func_with_2_derivs
-                ),
-                rot_func_and_2_derivs=rot_func_with_2_derivs,
+                evaluated_fot_dict=fot_dict,
                 number_of_ahc_finds_for_fit=5,
                 match_time=time_to_match,
                 settling_timescale=10.0,

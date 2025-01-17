@@ -26,9 +26,13 @@ std::vector<DataVector> strahlkorper_coefs_in_ringdown_distorted_frame(
     const std::string& surface_subfile_name,
     const size_t requested_number_of_times_from_end, const double match_time,
     const double settling_timescale,
-    const std::array<double, 3>& exp_func_and_2_derivs,
-    const std::array<double, 3>& exp_outer_bdry_func_and_2_derivs,
-    const std::vector<std::array<double, 4>>& rot_func_and_2_derivs) {
+    const std::optional<std::array<double, 3>>& exp_func_and_2_derivs,
+    const std::optional<std::array<double, 3>>&
+        exp_outer_bdry_func_and_2_derivs,
+    const std::optional<std::vector<std::array<double, 4>>>&
+        rot_func_and_2_derivs,
+    const std::optional<std::array<std::array<double, 3>, 3>>&
+        trans_func_and_2_derivs) {
   // Read the AhC coefficients from the H5 file
   const std::vector<ylm::Strahlkorper<Frame::Inertial>>& ahc_inertial_h5 =
       ylm::read_surface_ylm<Frame::Inertial>(
@@ -49,16 +53,35 @@ std::vector<DataVector> strahlkorper_coefs_in_ringdown_distorted_frame(
   // Create a time-dependent domain; only the the time-dependent map options
   // matter; the domain is just a spherical shell with inner and outer
   // radii chosen so any conceivable common horizon will fit between them.
-  const domain::creators::time_dependent_options::ExpansionMapOptions<true>
-      expansion_map_options{exp_func_and_2_derivs, settling_timescale,
-                            exp_outer_bdry_func_and_2_derivs,
-                            settling_timescale};
-  const domain::creators::time_dependent_options::RotationMapOptions<true>
-      rotation_map_options{rot_func_and_2_derivs, settling_timescale};
+  const auto expansion_map_options =
+      exp_func_and_2_derivs.has_value()
+          ? domain::creators::time_dependent_options::
+                ExpansionMapOptions<true>{exp_func_and_2_derivs.value(),
+                                    settling_timescale,
+                                    exp_outer_bdry_func_and_2_derivs.value(),
+                                    settling_timescale}
+          : std::optional<domain::creators::time_dependent_options::
+                              ExpansionMapOptions<true>>{};
+  const auto rotation_map_options =
+      rot_func_and_2_derivs.has_value()
+          ? domain::creators::time_dependent_options::
+                RotationMapOptions<true>{rot_func_and_2_derivs.value(),
+                                   settling_timescale}
+          : std::optional<domain::creators::time_dependent_options::
+                              RotationMapOptions<true>>{};
+  const auto translation_map_options =
+      trans_func_and_2_derivs.has_value()
+          ? domain::creators::sphere::TimeDependentMapOptions::
+                TranslationMapOptions{trans_func_and_2_derivs.value()}
+          : std::optional<domain::creators::sphere::TimeDependentMapOptions::
+                              TranslationMapOptions>{};
   const domain::creators::sphere::TimeDependentMapOptions
-      time_dependent_map_options{match_time,           std::nullopt,
-                                 rotation_map_options, expansion_map_options,
-                                 std::nullopt,         true};
+      time_dependent_map_options{match_time,
+                                 std::nullopt,
+                                 rotation_map_options,
+                                 expansion_map_options,
+                                 translation_map_options,
+                                 true};
   const domain::creators::Sphere domain_creator{
       0.01,
       200.0,

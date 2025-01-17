@@ -42,4 +42,10 @@ spectre_add_python_bindings_test(
   "unit;IO;H5;python"
   PyH5)
 
+spectre_add_python_bindings_test(
+  "Unit.IO.H5.Python.FunctionsOfTimeFromVolume"
+  Test_FunctionsOfTimeFromVolume.py
+  "unit;IO;H5;python"
+  PyH5)
+
 

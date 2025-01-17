@@ -16,7 +16,7 @@ InitialData:
   NumericInitialData:
     FileGlob: "{{ IdFileGlob }}"
     Subgroup: "{{ IdFileGlobSubgroup }}"
-    ObservationValue: &InitialTime "{{ MatchTime }}"
+    ObservationValue: &InitialTime {{ MatchTime }}
     ObservationValueEpsilon: Auto
     ElementsAreIdentical: False
     Variables:
@@ -65,24 +65,17 @@ DomainCreator:
         # and has not been tested for other configurations.
         SizeInitialValues: [0.0, -1.0, 0.0]
       RotationMap:
-        InitialQuaternions:
-          - [{{ Rotation0 }}, {{ Rotation1 }}, {{ Rotation2 }}, {{ Rotation3 }}]
-          - [{{ dtRotation0 }}, {{ dtRotation1 }}, {{ dtRotation2 }},
-             {{ dtRotation3 }}]
-          - [{{ dt2Rotation0 }}, {{ dt2Rotation1 }}, {{ dt2Rotation2}},
-             {{ dt2Rotation3 }}]
+        InitialQuaternions: {{ Rotation }}
         DecayTimescale: 1.0
       ExpansionMap:
         # During the ringdown, only the outer boundary's expansion map is
         # applied.
         InitialValues: [1.0, 0.0, 0.0]
-        InitialValuesOuterBoundary: [{{ ExpansionOuterBdry }},
-                                     {{ dtExpansionOuterBdry }},
-                                     {{ dt2ExpansionOuterBdry }}]
+        InitialValuesOuterBoundary: {{ ExpansionOuterBdry }}
         DecayTimescale: 1.0
         DecayTimescaleOuterBoundary: 1.0
       TranslationMap:
-        InitialValues: [[0.0, 0.0, 0.0], [0.0, 0.0, 0.0], [0.0, 0.0, 0.0]]
+        InitialValues: {{ Translation }}
       TransitionRotScaleTrans: True
     OuterBoundaryCondition:
       ConstraintPreservingBjorhus:

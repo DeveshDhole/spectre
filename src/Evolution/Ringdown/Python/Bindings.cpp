@@ -30,7 +30,7 @@ void bind_strahlkorper_coefs_in_ringdown_distorted_frame(py::module& m) {
         py::arg("requested_number_of_times_from_end"), py::arg("match_time"),
         py::arg("settling_timescale"), py::arg("exp_func_and_2_derivs"),
         py::arg("exp_outer_bdry_func_and_2_derivs"),
-        py::arg("rot_func_and_2_derivs"));
+        py::arg("rot_func_and_2_derivs"), py::arg("trans_func_and_2_derivs"));
 }
 }  // namespace evolution::Ringdown::py_bindings
 

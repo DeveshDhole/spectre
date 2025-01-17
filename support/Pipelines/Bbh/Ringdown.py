@@ -16,7 +16,7 @@ from spectre.Evolution.Ringdown.ComputeAhCCoefsInRingdownDistortedFrame import (
 )
 
 # next import out of order to avoid Unrecognized PUP::able::PUP_ID error
-from spectre.Evolution.Ringdown.FunctionsOfTimeFromVolume import (
+from spectre.IO.H5.FunctionsOfTimeFromVolume import (
     functions_of_time_from_volume,
 )
 from spectre.support.Schedule import schedule, scheduler_options
@@ -117,8 +117,8 @@ def start_ringdown(
         fot_vol_h5_path: The full path to any volume data containing the
         functions of time at the time of AhC finds, defaults to BbhVolume0.h5 in
         the inspiral_run_dir.
-        fot_vol_subfile: Subfile containing volume data where at times of AhC
-        finds, defaults to 'ForContinuation'.
+        fot_vol_subfile: Subfile containing volume data at times of AhC finds,
+        defaults to 'ForContinuation'.
         path_to_output_h5: H5 file to output horizon coefficients needed for
         Ringdown.
         output_subfile_prefix: Subfile prefix for output data, defaults to
@@ -163,37 +163,41 @@ def start_ringdown(
         polynomial_order=polynomial_order,
     )
 
-    # Compute ringdown shape coefficients and function of time info
-    # for ringdown
-    with spectre_h5.H5File(str(fot_vol_h5_path), "r") as h5file:
-        if fot_vol_subfile.split(".")[-1] == "vol":
-            fot_vol_subfile = fot_vol_subfile.split(".")[0]
-        volfile = h5file.get_vol("/" + fot_vol_subfile)
-        obs_ids = volfile.list_observation_ids()
-        fot_times = np.array(list(map(volfile.get_observation_value, obs_ids)))
-        which_obs_id = np.argmin(np.abs(fot_times - match_time))
-
-        logger.info("Desired match time: " + str(match_time))
-        logger.info("Selected ObservationID: " + str(which_obs_id))
-        logger.info("Selected match time: " + str(fot_times[which_obs_id]))
-
-    match_time = fot_times[which_obs_id]
-
-    (
-        expansion_func_with_2_derivs,
-        expansion_func_outer_boundary_with_2_derivs,
-        rotation_func_with_2_derivs,
-    ) = functions_of_time_from_volume(
-        str(fot_vol_h5_path), fot_vol_subfile, match_time, which_obs_id
+    evaluated_fot_dict = functions_of_time_from_volume(
+        str(fot_vol_h5_path), fot_vol_subfile, match_time
     )
+    match_time = evaluated_fot_dict["MatchTime"]
+
+    # This section checks for functions of time in the dictionary. It also
+    # alters some values in the evaluated functions of time dictionary. The
+    # ringdown only requires the outer boundary expansion map so here we set the
+    # inner expansion map to the identity (this should be changed to a settle to
+    # const at a later time). We also set the translation map to 0 since
+    # translation is not supported in the transition to ringdown yet.
+    if "ExpansionOuterBoundary" not in evaluated_fot_dict:
+        raise ValueError(
+            f"The transition to ringdown script requires the "
+            f" ExpansionOuterBoundary functions of time to be valid at the"
+            f" match time. "
+        )
+    if "Rotation" not in evaluated_fot_dict:
+        evaluated_fot_dict["Rotation"] = [
+            [1.0, 0.0, 0.0, 0.0],
+            [0.0, 0.0, 0.0, 0.0],
+            [0.0, 0.0, 0.0, 0.0],
+        ]
+    evaluated_fot_dict["Expansion"] = [1.0, 0.0, 0.0]
+    evaluated_fot_dict["Translation"] = [
+        [0.0, 0.0, 0.0],
+        [0.0, 0.0, 0.0],
+        [0.0, 0.0, 0.0],
+    ]
 
     ringdown_ylm_coefs, ringdown_ylm_legend = (
         compute_ahc_coefs_in_ringdown_distorted_frame(
             str(ahc_reductions_path),
             ahc_subfile,
-            expansion_func_with_2_derivs,
-            expansion_func_outer_boundary_with_2_derivs,
-            rotation_func_with_2_derivs,
+            evaluated_fot_dict,
             number_of_ahc_finds_for_fit,
             match_time,
             settling_timescale,
@@ -227,42 +231,38 @@ def start_ringdown(
             version=0,
         )
         ahc_dt2_datfile.append(ringdown_ylm_coefs[2])
-    logger.info("Obtained ringdown coefs")
+    logger.debug("Obtained ringdown coefs")
     # Print out coefficients for insertion into BBH domain
-    logger.info("Expansion: " + str(expansion_func_with_2_derivs))
-    logger.info(
-        "ExpansionOutrBdry: " + str(expansion_func_outer_boundary_with_2_derivs)
+    logger.debug("Expansion: " + str(evaluated_fot_dict["Expansion"]))
+    logger.debug(
+        "ExpansionOutrBdry: "
+        + str(evaluated_fot_dict["ExpansionOuterBoundary"])
     )
-    logger.info("Rotation: " + str(rotation_func_with_2_derivs))
-    logger.info("Match time: " + str(match_time))
-    logger.info("Settling timescale: " + str(settling_timescale))
-    logger.info("Lmax: " + str(int(ringdown_ylm_coefs[0][4])))
+    logger.debug("Rotation: " + str(evaluated_fot_dict["Rotation"]))
+    logger.debug("Match time: " + str(match_time))
+    logger.debug("Settling timescale: " + str(settling_timescale))
+    logger.debug("Lmax: " + str(int(ringdown_ylm_coefs[0][4])))
 
     ringdown_params["MatchTime"] = match_time
     ringdown_params["ShapeMapLMax"] = int(ringdown_ylm_coefs[0][4])
     ringdown_params["PathToAhCCoefsH5File"] = path_to_output_h5
     ringdown_params["AhCCoefsSubfilePrefix"] = output_subfile_prefix
-    ringdown_params["Rotation0"] = rotation_func_with_2_derivs[0][0]
-    ringdown_params["Rotation1"] = rotation_func_with_2_derivs[0][1]
-    ringdown_params["Rotation2"] = rotation_func_with_2_derivs[0][2]
-    ringdown_params["Rotation3"] = rotation_func_with_2_derivs[0][3]
-    ringdown_params["dtRotation0"] = rotation_func_with_2_derivs[1][0]
-    ringdown_params["dtRotation1"] = rotation_func_with_2_derivs[1][1]
-    ringdown_params["dtRotation2"] = rotation_func_with_2_derivs[1][2]
-    ringdown_params["dtRotation3"] = rotation_func_with_2_derivs[1][3]
-    ringdown_params["dt2Rotation0"] = rotation_func_with_2_derivs[2][0]
-    ringdown_params["dt2Rotation1"] = rotation_func_with_2_derivs[2][1]
-    ringdown_params["dt2Rotation2"] = rotation_func_with_2_derivs[2][2]
-    ringdown_params["dt2Rotation3"] = rotation_func_with_2_derivs[2][3]
-    ringdown_params["ExpansionOuterBdry"] = (
-        expansion_func_outer_boundary_with_2_derivs[0]
-    )
-    ringdown_params["dtExpansionOuterBdry"] = (
-        expansion_func_outer_boundary_with_2_derivs[1]
-    )
-    ringdown_params["dt2ExpansionOuterBdry"] = (
-        expansion_func_outer_boundary_with_2_derivs[2]
-    )
+    ringdown_params["Rotation"] = yaml.safe_dump(
+        evaluated_fot_dict["Rotation"],
+        default_flow_style=True,
+        width=float("inf"),
+    ).strip()
+    ringdown_params["ExpansionOuterBdry"] = yaml.safe_dump(
+        evaluated_fot_dict["ExpansionOuterBoundary"],
+        default_flow_style=True,
+        width=float("inf"),
+    ).strip()
+    ringdown_params["Translation"] = yaml.safe_dump(
+        evaluated_fot_dict["Translation"],
+        default_flow_style=True,
+        width=float("inf"),
+    ).strip()
+
     # To avoid interpolation errors, put outer boundary of ringdown domain
     # slightly inside the outer boundary of the inspiral domain
     ringdown_params["OuterBdryRadius"] = (
@@ -276,7 +276,7 @@ def start_ringdown(
     ringdown_params["FinalTime"] = (
         match_time + ringdown_params["OuterBdryRadius"] + 200.0
     )
-    logger.info(f"Ringdown parameters: {pretty_repr(ringdown_params)}")
+    logger.debug(f"Ringdown parameters: {pretty_repr(ringdown_params)}")
 
     # Schedule!
     return schedule(
@@ -324,7 +324,7 @@ def start_ringdown(
     ),
     default=None,
     help=(
-        "Path to reduction file containing AhC coefs, defualts to"
+        "Path to reduction file containing AhC coefs, defaults to"
         " 'BbhReductions.h5' in directory given."
     ),
 )
@@ -373,7 +373,7 @@ def start_ringdown(
     default=None,
     help=(
         "Output h5 file for shape coefs, defaults to directory where command"
-        "was run."
+        " was run."
     ),
 )
 @click.option(

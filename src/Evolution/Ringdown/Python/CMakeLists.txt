@@ -12,7 +12,6 @@ spectre_python_add_module(
     PYTHON_FILES
     __init__.py
     ComputeAhCCoefsInRingdownDistortedFrame.py
-    FunctionsOfTimeFromVolume.py
 )
 
 spectre_python_headers(
