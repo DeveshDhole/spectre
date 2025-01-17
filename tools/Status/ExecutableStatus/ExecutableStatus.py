@@ -177,20 +177,11 @@ class EvolutionStatus(ExecutableStatus):
             )
             time_window = time_steps[time_steps["Time"] >= start_time]
             dt_sim = time_window.iloc[-1]["Time"] - time_window.iloc[0]["Time"]
-            dt_wall_min = (
-                time_window.iloc[-1]["Minimum Walltime"]
-                - time_window.iloc[0]["Minimum Walltime"]
-            )
-            dt_wall_max = (
+            dt_wall = (
                 time_window.iloc[-1]["Maximum Walltime"]
                 - time_window.iloc[0]["Maximum Walltime"]
             )
-            speed = (
-                (dt_sim / dt_wall_min + dt_sim / dt_wall_max)
-                / 2.0
-                * 60.0
-                * 60.0
-            )
+            speed = dt_sim / dt_wall * 3600.0
             result["Speed"] = speed
         except:
             logger.debug("Unable to estimate simulation speed.", exc_info=True)
@@ -265,15 +256,16 @@ class EvolutionStatus(ExecutableStatus):
         )
         st.plotly_chart(fig)
         run_speed = (
-            (
-                time_steps.index.diff() / time_steps["Maximum Walltime"].diff()
-                + time_steps.index.diff()
-                / time_steps["Minimum Walltime"].diff()
-            )
-            / 2
-            * 3600
-        )
+            time_steps.index.diff() / time_steps["Maximum Walltime"].diff()
+        ) * 3600
         fig = px.line(run_speed.rolling(30, min_periods=1).mean())
+        fig.add_scatter(
+            x=run_speed.index,
+            y=run_speed,
+            mode="lines",
+            opacity=0.5,
+            name="Instantaneous speed",
+        )
         fig.update_layout(
             xaxis_title="Time [M]",
             yaxis_title="Simulation speed [M/h]",
