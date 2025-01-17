@@ -64,8 +64,8 @@ FromVolumeFileShapeSize<Object>::FromVolumeFileShapeSize(
     std::string subfile_name)
     : FromVolumeFile(std::move(h5_filename), std::move(subfile_name)),
       transition_ends_at_cube(transition_ends_at_cube_in) {
-  const auto shape_fot_map =
-      retrieve_function_of_time({"Shape" + name(Object)}, std::nullopt);
+  const auto shape_fot_map = retrieve_function_of_time(
+      {std::string{"Shape" + name(Object)}}, std::nullopt);
   const auto& shape_fot = shape_fot_map.at("Shape" + name(Object));
 
   const double initial_time = shape_fot->time_bounds()[0];
